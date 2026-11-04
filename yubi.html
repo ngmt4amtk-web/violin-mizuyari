@@ -164,6 +164,8 @@
 
   #drops { position: absolute; left: 75.8%; top: 78.7%; width: 0; height: 0; z-index: 5; pointer-events: none; --fall: 120px; --fallh: 48px; --dx: -60px; --dxh: -33px; }
   #drops .probe { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  /* 絵のジョウロ（images/can.png）は注ぎ口が上向きなので、傾けた時の注ぎ口の先が違う所に来る（試験/shiage.py が出す値） */
+  #canBox.img-ok ~ #drops { left: 85%; top: 55%; }
   #drops .drop {
     position: absolute; left: 0; top: 0;
     width: var(--dropW); height: calc(var(--dropW) * 1.55);
@@ -1090,8 +1092,9 @@
     var left = (pr.left - sr.left) + pr.width * 0.5 + pr.width * 0.12;
     left = clamp(left, 4, sr.width - cw - 4);
     canWrap.style.left = Math.round(left) + 'px';
-    var spoutX = left + cw * 0.758;
-    var spoutY = canWrap.offsetTop + (canWrap.offsetHeight || 0) * 0.787;
+    // 水の粒の出る位置（#drops の left / top。絵のジョウロと仮の図形で違う）
+    var spoutX = left + drops.offsetLeft;
+    var spoutY = canWrap.offsetTop + drops.offsetTop;
     var tag = plots[k].el.querySelector('.lip').getBoundingClientRect();
     var targetX = (tag.left - sr.left) + tag.width * 0.5;
     var targetY = (tag.top - sr.top) + 4;
@@ -1111,6 +1114,8 @@
   }
   function hideCan() { canVisible = false; canWrap.classList.remove('on'); }
   window.addEventListener('resize', function () { if (canKey >= 0) placeCan(canKey); });
+  // ジョウロの絵が後から読み込まれると水の出る位置が変わるので、置き直す
+  (function () { var ci = document.querySelector('#canBox img.asset'); if (ci) ci.addEventListener('load', function () { if (canKey >= 0) placeCan(canKey); }); })();
 
   /* ---------- ヒント ---------- */
   function setHint(html) {

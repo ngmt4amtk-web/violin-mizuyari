@@ -12,7 +12,7 @@ const trem={hz:8,dipDb:12,dipMs:40,noise:0.5};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 // 毎コマ、ジョウロと判定器の状態が変わった時だけ、判定器の時刻（音の秒）と一緒に残す
-const REC=`(function(){var L=window.__log=[];var last='';function f(){var s=window.__wg.getState();var d=window.__wg.detector;
+const REC=`(function(){var L=window.__log=[];var last='';var P=document.getElementById('plant');window.__anim=[];new MutationObserver(function(){var n=document.querySelector('#plant > .stage.nyoki');window.__anim.push({t:+window.__wg.detector.now.toFixed(2),boing:P.classList.contains('boing'),nyoki:n?n.getAttribute('data-stage'):null,pon:document.getElementById('pon').classList.contains('go'),grow:P.style.getPropertyValue('--grow')});}).observe(document.getElementById('scene'),{subtree:true,attributes:true,attributeFilter:['class','style']});function f(){var s=window.__wg.getState();var d=window.__wg.detector;
 var k=[s.state,s.canVisible,s.canPouring,s.dropsOn,s.waters,s.finished,s.stage].join('|');
 if(k!==last){last=k;L.push({t:+d.now.toFixed(3),state:s.state,can:s.canVisible,pour:s.canPouring,drops:s.dropsOn,waters:s.waters,total:+s.total.toFixed(2),finished:s.finished,stage:s.stage,bar:document.getElementById('barText').textContent});}
 requestAnimationFrame(f);}requestAnimationFrame(f);})()`;
@@ -51,6 +51,7 @@ async function run(name,segs,secs,{w=1180,h=820,mobile=false,pre=null,shotsAt=[]
     await sleep(100);
   }
   info.log=await ev('JSON.stringify(window.__log)');
+  info.anim=await ev('JSON.stringify(window.__anim||[])');
   info.end=await ev('JSON.stringify(window.__wg.getState())');
   info.cfgSaved=await ev(`localStorage.getItem('wg_cfg_v1')`);
   info.geo=geo; info.exceptions=exc;
@@ -65,7 +66,7 @@ async function run(name,segs,secs,{w=1180,h=820,mobile=false,pre=null,shotsAt=[]
     // 1. 4秒の音1本: 音が聞こえた所でジョウロ（立ったまま）→ 1秒で傾けて水
     ['one4s',[Z(1.5),S(4),Z(3)],10,{shotsAt:[2.0,3.6]}],
     // 2. 12秒の音: 初期値10秒で咲く
-    ['bloom10',[Z(1.5),S(12),Z(3)],18,{shotsAt:[9.5,14]}],
+    ['bloom10',[Z(1.5),S(12),Z(3)],18,{shotsAt:[1.2,3.4,6.5,9.8,14]}],
     // 3. 0.7秒の音3つ: ジョウロは出るが、水は出ない・数えない
     ['short07',[Z(1.5),S(0.7),Z(1.2),S(0.7),Z(1.2),S(0.7),Z(3)],9,{}],
     // 3b. 水やりの直後（1.5秒以内）に短い音: 次の音が始まったら水を止め、立てて待つ

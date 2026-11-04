@@ -136,10 +136,51 @@
   }
 
   #plant {
-    position: absolute; left: 50%;
+    position: absolute; left: calc(50% - var(--plantH) / 2);
     bottom: calc(var(--moundBottom) + var(--moundH) + 2px);
     width: var(--plantH); height: var(--plantH);
-    transform: translateX(-50%); z-index: 2;
+    /* 同じ段階の中でも、秒が増えるほど少しずつ背が伸びる（--grow は 0.8〜1）。
+       真ん中に置くのは left で行い、transform に translate を入れない（ぽよんの scale で横にずれないように） */
+    transform: scale(var(--grow, 1)); transform-origin: 50% 100%;
+    transition: transform .6s cubic-bezier(.3,1.5,.5,1);
+    z-index: 2;
+  }
+  /* 1秒たまるごとに、ぽよんと弾む（transform とは別の scale で重ねる） */
+  #plant.boing { animation: boing .42s ease-out; }
+  @keyframes boing {
+    0% { scale: 1 1; }
+    30% { scale: 1.07 .93; }
+    60% { scale: .97 1.06; }
+    100% { scale: 1 1; }
+  }
+  /* 次の段階へ進んだ時、土からニョキッと伸び上がる */
+  #plant > .stage.nyoki { opacity: 1; transition: none; animation: nyoki .75s cubic-bezier(.25,1.4,.5,1) both; }
+  @keyframes nyoki {
+    0% { transform: translateX(-50%) scale(.55, .12); }
+    45% { transform: translateX(-50%) scale(.88, 1.2); }
+    70% { transform: translateX(-50%) scale(1.08, .93); }
+    85% { transform: translateX(-50%) scale(.98, 1.03); }
+    100% { transform: translateX(-50%) scale(1, 1); }
+  }
+  /* 伸び上がる時に根元からはじける粒 */
+  #pon {
+    position: absolute; left: 50%; z-index: 4; width: 0; height: 0; pointer-events: none;
+    bottom: calc(var(--moundBottom) + var(--moundH) + 6px);
+  }
+  #pon i {
+    position: absolute; left: 0; top: 0; width: var(--ps, 12px); height: var(--ps, 12px);
+    margin: calc(var(--ps, 12px) / -2) 0 0 calc(var(--ps, 12px) / -2);
+    border-radius: 50%; background: var(--pc, #8fd16a); opacity: 0;
+  }
+  #pon.go i { animation: pon .7s cubic-bezier(.2,.8,.4,1) both; }
+  @keyframes pon {
+    0% { transform: translate(0, 0) scale(.4); opacity: 1; }
+    70% { opacity: 1; }
+    100% { transform: translate(var(--px), var(--py)) scale(1); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #plant { transition: none; }
+    #plant.boing, #plant > .stage.nyoki, #pon.go i { animation: none; }
   }
   #plant > .stage {
     position: absolute; left: 50%; bottom: 0;
@@ -180,6 +221,8 @@
   /* ---------- 水の粒 ---------- */
   #drops { position: absolute; left: 75.8%; top: 78.7%; width: 0; height: 0; z-index: 5; pointer-events: none; --fall: 150px; --fallh: 60px; --dx: -100px; --dxh: -55px; }
   #drops .probe { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  /* 絵のジョウロ（images/can.png）は注ぎ口が上向きなので、傾けた時の注ぎ口の先が違う所に来る（試験/shiage.py が出す値） */
+  #canBox.img-ok ~ #drops { left: 85%; top: 55%; }
   #drops .drop {
     position: absolute; left: 0; top: 0;
     width: var(--dropW); height: calc(var(--dropW) * 1.55);
@@ -341,6 +384,17 @@
     </div>
 
     <div id="soilLip" aria-hidden="true"></div>
+
+    <div id="pon" aria-hidden="true">
+      <i style="--px:-70px;--py:-46px;--pc:#8fd16a"></i>
+      <i style="--px:-48px;--py:-82px;--pc:#ffd93b;--ps:10px"></i>
+      <i style="--px:-16px;--py:-104px;--pc:#7cc6f2"></i>
+      <i style="--px:18px;--py:-98px;--pc:#ff8fb3;--ps:10px"></i>
+      <i style="--px:50px;--py:-78px;--pc:#8fd16a"></i>
+      <i style="--px:74px;--py:-40px;--pc:#ffd93b"></i>
+      <i style="--px:-88px;--py:-12px;--pc:#7cc6f2;--ps:9px"></i>
+      <i style="--px:90px;--py:-10px;--pc:#ff8fb3;--ps:9px"></i>
+    </div>
 
     <div id="plant">
       <div class="stage swap" data-stage="seed" style="--f:.19; --ar:3.33">
@@ -971,20 +1025,61 @@
     if (p >= 0.10) return 'sprout';
     return 'seed';
   }
+  var STAGE_ORDER = ['seed', 'sprout', 'stem', 'bud', 'flower'];
+  var maxStageIdx = 0;
   function setStage(s) {
     if (s === stageShown) return;
+    // 先の段階へ進んだ時だけニョキッと伸ばす（種へ戻す時・咲いた時は使わない。咲いた時は flowerPop）
+    // トレモロで取り消された分を取り戻した時は、同じ段階で2回ニョキッとしない（その回で一番進んだ段階より先だけ）
+    var idx = STAGE_ORDER.indexOf(s);
+    var grew = stageShown !== '' && s !== 'flower' && idx > maxStageIdx;
+    if (idx > maxStageIdx) maxStageIdx = idx;
     stageShown = s;
     for (var i = 0; i < stageEls.length; i++) {
-      stageEls[i].classList.toggle('show', stageEls[i].getAttribute('data-stage') === s);
+      var on = stageEls[i].getAttribute('data-stage') === s;
+      stageEls[i].classList.toggle('show', on);
+      stageEls[i].classList.remove('nyoki');
+      if (on && grew) { void stageEls[i].offsetWidth; stageEls[i].classList.add('nyoki'); }
     }
+    if (grew) pon();
+  }
+  var ponEl = $('pon');
+  function pon() {
+    ponEl.classList.remove('go');
+    void ponEl.offsetWidth;
+    ponEl.classList.add('go');
+  }
+
+  /* ---------- ニョキニョキ（見た目だけ。数え方は変えない） ---------- */
+  var STAGE_RANGE = { sprout: [0.10, 0.35], stem: [0.35, 0.70], bud: [0.70, 1.0] };
+  var lastGrow = -1;
+  function setGrow(stage, p) {
+    // 同じ段階の中で、進み具合に合わせて 0.8 → 1 へ少しずつ大きくする
+    var r = STAGE_RANGE[stage], g = 1;
+    if (r) g = 0.8 + 0.2 * clamp((p - r[0]) / (r[1] - r[0]), 0, 1);
+    g = Math.round(g * 100) / 100;
+    if (g !== lastGrow) { lastGrow = g; plant.style.setProperty('--grow', g.toFixed(2)); }
+  }
+  var lastSec = -1;
+  var maxSec = 0;
+  function boing(sec) {
+    // 1秒たまるごとに、ぽよんと弾む。取り消された分を取り戻した時は弾まない（その回で一番進んだ秒より先だけ）
+    if (lastSec >= 0 && sec > lastSec && sec > maxSec) {
+      plant.classList.remove('boing');
+      void plant.offsetWidth;
+      plant.classList.add('boing');
+    }
+    if (sec > maxSec) maxSec = sec;
+    lastSec = sec;
   }
 
   /* ---------- 水の落ちる距離を合わせる ---------- */
   function measureDrops() {
     var sr = scene.getBoundingClientRect();
     var mr = mound.getBoundingClientRect();
-    var spoutX = canWrap.offsetLeft + (canWrap.offsetWidth || 0) * 0.758;
-    var spoutY = canWrap.offsetTop + (canWrap.offsetHeight || 0) * 0.787;
+    // 水の粒の出る位置（#drops の left / top。絵のジョウロと仮の図形で違う）
+    var spoutX = canWrap.offsetLeft + drops.offsetLeft;
+    var spoutY = canWrap.offsetTop + drops.offsetTop;
     var targetX = (mr.left - sr.left) + mr.width * 0.45;   // 植物の根元の少し左（ジョウロは左側）
     var targetY = (mr.top - sr.top) + 12;
     var dx = targetX - spoutX;
@@ -999,6 +1094,8 @@
     drops.style.setProperty('--fallh', Math.round(fall * 0.40) + 'px');
   }
   window.addEventListener('resize', measureDrops);
+  // ジョウロの絵が後から読み込まれると水の出る位置が変わるので、測り直す
+  (function () { var ci = document.querySelector('#canBox img.asset'); if (ci) ci.addEventListener('load', measureDrops); })();
   window.addEventListener('orientationchange', function () { setTimeout(measureDrops, 250); });
 
   /* ---------- ジョウロ ---------- */
@@ -1058,6 +1155,8 @@
   }
   function playAgain() {
     finished = false;
+    maxStageIdx = 0;   // 演出の「一番進んだ所」は、もういちどの時だけ戻す
+    maxSec = 0;
     det.reset();
     celebrating = false;
     plant.classList.remove('pop');
@@ -1129,6 +1228,8 @@
     var pct = finished ? 1 : clamp(d.total / secs, 0, 1);
     // 花は咲いた知らせ（bloom）が来てから出す。合計が開花の秒数に届いても、確定するまでの約0.9秒はつぼみのまま
     setStage(finished ? 'flower' : stageFor(Math.min(pct, 0.99)));
+    setGrow(stageShown, pct);
+    if (!finished) boing(Math.floor(Math.min(d.total, secs) + 1e-6));
 
     var p100 = Math.round(pct * 100);
     if (p100 !== lastBarPct) {
