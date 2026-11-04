@@ -49,10 +49,11 @@
   #scene { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
   :root {
-    --soilW: min(94vw, 1000px);
+    --n: 5;   /* タネの数（レベルで変わる。JS で入れる） */
+    --soilW: min(94vw, calc(var(--n) * 210px + 160px), 1000px);
     --soilH: min(13vmin, 120px);
     --moundH: calc(var(--soilH) * 1.7);
-    --cellW: calc(var(--soilW) / 5);
+    --cellW: calc(var(--soilW) / var(--n));
     --plantH: min(calc(var(--cellW) * 1.45), 34vh, 300px);
     --canW: min(17vmin, 150px);
     --canH: calc(var(--canW) * 0.95);
@@ -96,7 +97,7 @@
     position: absolute; left: calc(50% - var(--soilW) / 2);
     bottom: calc(var(--moundBottom) + var(--moundH) * 0.18);
     width: var(--soilW);
-    display: grid; grid-template-columns: repeat(5, 1fr);
+    display: grid; grid-template-columns: repeat(var(--n), 1fr);
     pointer-events: none;
   }
   .plot { position: relative; height: calc(var(--plantH) + var(--moundH) * 0.48); }
@@ -301,6 +302,27 @@
   #pickRow button:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.22); }
   #pickRow .big { font-size: clamp(24px, 5.4vmin, 50px); font-weight: 900; line-height: 1.05; }
   #pickRow .sm { font-size: clamp(13px, 2.2vmin, 20px); font-weight: 700; opacity: .92; }
+  #pickF { display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 3vmin, 28px); }
+  #pickFRow { display: flex; gap: clamp(10px, 3vmin, 28px); }
+  #pickFRow button {
+    font-family: inherit; cursor: pointer; border: none; border-radius: 50%;
+    width: clamp(84px, 18vmin, 150px); height: clamp(84px, 18vmin, 150px);
+    background: #fff; color: var(--c); border: 6px solid var(--c);
+    font-size: clamp(40px, 9vmin, 76px); font-weight: 900; line-height: 1;
+    box-shadow: 0 6px 0 rgba(0,0,0,.18);
+  }
+  #pickFRow button:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+  /* 音程のアドバイス（小さめ。本人「小さめでよい」） */
+  #adv {
+    position: absolute; z-index: 6; left: 0; top: 0; pointer-events: none;
+    padding: .2em .6em; border-radius: 999px; background: rgba(255,255,255,.95); white-space: nowrap;
+    font-size: clamp(12px, 2vmin, 17px); font-weight: 800; color: #2b5b7a;
+    box-shadow: 0 2px 6px rgba(20,60,40,.15);
+    transform: translate(-50%, -100%); opacity: 0; transition: opacity .2s;
+  }
+  #adv.show { opacity: 1; }
+  #adv.up { color: #c0392b; }
+  #adv.down { color: #2470b8; }
   #pick .back { font-size: clamp(14px, 2.2vmin, 18px); color: #24503a; font-weight: 700; }
 
   /* ---------- 下のボタン ---------- */
@@ -395,7 +417,7 @@
 
   <header>
     <div id="bloomLine"><span class="str" id="strName">ラせん</span>の タネを さかせよう</div>
-    <div id="subLine">さいた <span id="doneN">0</span> / 5 ・ みずやり <span id="waterN">0</span> かい</div>
+    <div id="subLine">さいた <span id="doneN">0</span> / <span id="seedN">5</span> ・ みずやり <span id="waterN">0</span> かい</div>
   </header>
 
   <main id="scene">
@@ -442,6 +464,7 @@
     </div>
 
     <div id="hint"></div>
+    <div id="adv"></div>
 
     <div id="pick">
       <h2>どの げんで あそぶ？</h2>
@@ -450,6 +473,14 @@
         <button type="button" data-str="D" style="--sc:#EE8A00"><span class="big">レせん</span><span class="sm">D</span></button>
         <button type="button" data-str="A" style="--sc:#CC1030"><span class="big">ラせん</span><span class="sm">A</span></button>
         <button type="button" data-str="E" style="--sc:#138A3A"><span class="big">ミせん</span><span class="sm">E</span></button>
+      </div>
+      <div id="pickF" hidden>
+        <h2>どの ゆびで あそぶ？</h2>
+        <div id="pickFRow">
+          <button type="button" data-f="0">0</button>
+          <button type="button" data-f="1">1</button>
+          <button type="button" data-f="2">2</button>
+        </div>
       </div>
       <a class="back" href="index.html">← レベルを えらびなおす</a>
     </div>
@@ -489,6 +520,7 @@
           <button type="button" data-tol="40">きびしめ</button>
           <button type="button" data-tol="60">ふつう</button>
           <button type="button" data-tol="90">ゆるめ</button>
+          <button type="button" data-tol="140">とてもゆるい</button>
         </div>
         <div class="note">いちばん近い指の音から、ゆるめは90セント、ふつうは60セント、きびしめは40セントまでを、その指の音とみなします。</div>
       </div>
@@ -978,7 +1010,7 @@
   var PC = ['ド', 'ド♯', 'レ', 'レ♯', 'ミ', 'ファ', 'ファ♯', 'ソ', 'ソ♯', 'ラ', 'ラ♯', 'シ'];
   function noteName(midi) { return PC[((midi % 12) + 12) % 12]; }
 
-  // opts = {string:'A', high2:{G:true,D:true,A:true,E:true}, tolCents:90, a4:442}
+  // opts = {string:'A', high2:{G:true,D:true,A:true,E:true}, tolCents:90, a4:442, fingers:[0,1,2]（レベル2〜4だけ）}
   function make(opts) {
     var chosen = opts.string;
     var tol = opts.tolCents || 90;
@@ -996,6 +1028,38 @@
     for (var f0 = 0; f0 < 5; f0++) add(chosen, f0);
     for (var f1 = 0; f1 < 5; f1++) {
       for (var i = 0; i < ORDER.length; i++) if (ORDER[i] !== chosen) add(ORDER[i], f1);
+    }
+
+    // レベル2〜4（opts.fingers に遊ぶ指の一覧）: 音程はかなりゆるく見る（本人 2026-11-04「音程はかなりゆるくて良い」）。
+    // 選んだ弦の 0〜4 の指のうち、いちばん近い指で決める（ほかの弦の半音で狭めない）。tol より離れていれば外れ。
+    // いちばん近い指が遊ぶ指なら、その指の一覧の中の番号（タネの番号）を key にする。遊ばない指なら「いまのは ◯」
+    if (opts.fingers) {
+      var act = opts.fingers.slice();
+      var own = [];
+      for (var f2 = 0; f2 < 5; f2++) own.push({ str: chosen, finger: f2, midi: STRINGS[chosen].midi + fingerSteps(high2[chosen] !== false)[f2] });
+      var fnA = function (hz) {
+        if (!(hz > 0)) return { key: null, heard: null };
+        var mf = 69 + 12 * Math.log2(hz / a4);
+        var bo = null, bd = 1e9;
+        for (var j = 0; j < own.length; j++) {
+          var d = (mf - own[j].midi) * 100;
+          if (Math.abs(d) < Math.abs(bd)) { bd = d; bo = own[j]; }
+        }
+        if (bo && Math.abs(bd) <= tol) {
+          var ki = act.indexOf(bo.finger);
+          return { key: ki >= 0 ? ki : null, heard: { str: chosen, finger: bo.finger, midi: bo.midi, cents: bd } };
+        }
+        // 選んだ弦のどの指からも遠い: ほかの弦の音として名前を出す
+        var bestO = null, bestOD = 1e9;
+        for (var k = 0; k < cand.length; k++) {
+          var d2 = (mf - cand[k].midi) * 100;
+          if (Math.abs(d2) < Math.abs(bestOD)) { bestOD = d2; bestO = cand[k]; }
+        }
+        if (!bestO || Math.abs(bestOD) > 60 || bestO.str === chosen) return { key: null, heard: { off: true, cents: bd } };
+        return { key: null, heard: { str: bestO.str, finger: bestO.finger, midi: bestO.midi, cents: bestOD } };
+      };
+      fnA.targets = act.map(function (f) { return own[f]; });
+      return fnA;
     }
 
     var fn = function (hz) {
@@ -1031,14 +1095,18 @@
   var SHARED_KEY = 'wg_cfg_v1';     // レベル1と同じ値（水の秒数・音の大きさ・トレモロ）
   var OWN_KEY = 'wg2_cfg_v1';       // レベル2だけの値
   var DIP_SCALE = { 4: 'きびしめ', 6: 'ふつう', 9: 'ゆるめ' };
-  var TOL_SCALE = { 40: 'きびしめ', 60: 'ふつう', 90: 'ゆるめ' };
+  var TOL_SCALE = { 40: 'きびしめ', 60: 'ふつう', 90: 'ゆるめ', 140: 'とてもゆるい' };
   var CELEB_MS = 3000;
-  var SEEDS = 5;
+  // レベル（本人 2026-11-04「レベル2が色と0か1か2か決めて1個、レベル3が0と1と2、レベル4が0〜3」）。
+  // ?lv= が無い時は前と同じ 0〜4（レベル5）
+  var LEVEL = (function () { var m = /[?&]lv=([2-5])(&|$)/.exec(window.location.search); return m ? +m[1] : 5; })();
+  var FINGERS = LEVEL === 2 ? [1] : LEVEL === 3 ? [0, 1, 2] : LEVEL === 4 ? [0, 1, 2, 3] : [0, 1, 2, 3, 4];
+  var SEEDS = FINGERS.length;
 
   var cfg = {
     // 初期値: タネ1つ5秒・水0.5秒・しきい値-55dB（本人 2026-11-04「しきい値デフォルト低くして、開花まで5秒がデフォルト、0.5秒で水が出るようにしよう」）
     waterStartSec: 0.5, onDb: -55, tremoloDipDb: 6,
-    seedSec: 5, tol: 90, a4: 442, string: '',
+    seedSec: 5, tol: 140, a4: 442, string: '', l2f: 1,
     high2: { G: true, D: true, A: true, E: true }
   };
 
@@ -1059,8 +1127,10 @@
     }
     var o = readJson(OWN_KEY);
     if (o) {
-      if (num(o.seedSec)) { var sd = clamp(Math.round(o.seedSec), 3, 60); if (!(o.v !== 3 && sd === 15)) cfg.seedSec = sd; }
-      if (o.tol === 40 || o.tol === 60 || o.tol === 90) cfg.tol = o.tol;
+      if (num(o.seedSec)) { var sd = clamp(Math.round(o.seedSec), 3, 60); if (!(!o.v && sd === 15)) cfg.seedSec = sd; }
+      // 前の版の初期値（ゆるめ=90）は、今の初期値（とてもゆるい=140）に読み替える（今の版の印は v: 4）
+      if (o.tol === 40 || o.tol === 60 || o.tol === 90 || o.tol === 140) { if (!((o.v || 0) < 4 && o.tol === 90)) cfg.tol = o.tol; }
+      if (o.l2f === 0 || o.l2f === 1 || o.l2f === 2) cfg.l2f = o.l2f;
       if (num(o.a4)) cfg.a4 = clamp(Math.round(o.a4), 440, 443);
       if (typeof o.string === 'string' && /^[GDAE]$/.test(o.string)) cfg.string = o.string;
       if (o.high2 && typeof o.high2 === 'object') {
@@ -1081,17 +1151,21 @@
       s.waterStartSec = cfg.waterStartSec; s.onDb = cfg.onDb; s.tremoloDipDb = cfg.tremoloDipDb;
       window.localStorage.setItem(SHARED_KEY, JSON.stringify(s));
       window.localStorage.setItem(OWN_KEY, JSON.stringify({
-        v: 3, seedSec: cfg.seedSec, tol: cfg.tol, a4: cfg.a4, string: cfg.string, high2: cfg.high2
+        v: 4, seedSec: cfg.seedSec, tol: cfg.tol, a4: cfg.a4, string: cfg.string, high2: cfg.high2, l2f: cfg.l2f
       }));
     } catch (e) { /* 保存できなくても動く */ }
   }
   readCfg();
+  if (LEVEL === 2) FINGERS[0] = cfg.l2f;
 
   function detOpts() {
     return { waterStartSec: cfg.waterStartSec, onDb: cfg.onDb, tremoloDipDb: cfg.tremoloDipDb, bloomSec: cfg.seedSec };
   }
   function makeClassifier() {
-    return window.Tane.make({ string: cfg.string || 'A', high2: cfg.high2, tolCents: cfg.tol, a4: cfg.a4 });
+    // レベル5（0〜4）は前と同じ見分け方。レベル2〜4は、選んだ弦の指でゆるく見る（key はタネの番号）
+    var o = { string: cfg.string || 'A', high2: cfg.high2, tolCents: cfg.tol, a4: cfg.a4 };
+    if (LEVEL < 5) o.fingers = FINGERS.slice();
+    return window.Tane.make(o);
   }
 
   /* ---------- 判定の核 ---------- */
@@ -1114,6 +1188,15 @@
   var pickEl = $('pick');
   var settings = $('settings');
 
+  // --soilW・--cellW は :root で決めているので、タネの数も :root に入れる
+  document.documentElement.style.setProperty('--n', String(SEEDS));
+  $('seedN').textContent = String(SEEDS);
+  if (LEVEL === 2) pickBtn.textContent = 'えらびなおす';
+  document.title = 'レベル' + LEVEL + ' ゆびのタネ';
+  function relabel() {
+    for (var i = 0; i < plots.length; i++) plots[i].tag.querySelector('b').textContent = String(FINGERS[i]);
+  }
+
   /* ---------- はたけを作る ---------- */
   var plots = [];
   (function () {
@@ -1123,7 +1206,7 @@
       p.className = 'plot';
       p.innerHTML = '<div class="pplant"></div><div class="lip"></div>' +
         '<div class="pon"><i style="--px:-46px;--py:-30px;--pc:#8fd16a"></i><i style="--px:-30px;--py:-56px;--pc:#ffd93b"></i><i style="--px:-8px;--py:-70px;--pc:#7cc6f2"></i><i style="--px:14px;--py:-66px;--pc:#ff8fb3"></i><i style="--px:34px;--py:-50px;--pc:#8fd16a"></i><i style="--px:50px;--py:-26px;--pc:#ffd93b"></i></div>' +
-        '<div class="tag"><b>' + i + '</b></div>';
+        '<div class="tag"><b>' + FINGERS[i] + '</b></div>';
       var pp = p.querySelector('.pplant');
       pp.appendChild(document.importNode(tpl.content, true));
       garden.appendChild(p);
@@ -1285,6 +1368,22 @@
     return '<span class="s" style="color:' + window.Tane.STRINGS[s].color + '">' + STR_LABEL[s] + '</span>';
   }
 
+  /* ---------- 音程のアドバイス（本人「高く指を伸ばして、低く指を狭く、小さめでよい」） ---------- */
+  var ADV_CENTS = 25, advCand = '', advCandSince = 0, advShown = '';
+  function showAdv(a) {
+    if (a === advShown) return;
+    advShown = a;
+    var el = $('adv');
+    if (!a) { el.classList.remove('show'); return; }
+    var kind = a.split(':')[0], k = +a.split(':')[1];
+    el.textContent = kind === 'up' ? '\u2191 たかく：ゆびを のばして' : '\u2193 ひくく：ゆびを せまく';
+    el.classList.toggle('up', kind === 'up'); el.classList.toggle('down', kind === 'down');
+    var sr = scene.getBoundingClientRect(), tr = plots[k].tag.getBoundingClientRect();
+    var x = clamp(tr.left - sr.left + tr.width / 2, 90, sr.width - 90);
+    el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(tr.top - sr.top - 6) + 'px';
+    el.classList.add('show');
+  }
+
   /* ---------- 咲いた・おしまい ---------- */
   function bloomPlot(t, k) {
     var pl = plots[k];
@@ -1302,6 +1401,7 @@
   function finish(t) {
     finished = true;
     det.pause();
+    showAdv('');
     hideCan();
     setHint('');
     celebrating = true; celebUntil = t + CELEB_MS;
@@ -1338,12 +1438,34 @@
     resetGame();
     if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
   });
-  pickBtn.addEventListener('click', function () { pickEl.hidden = false; det.pause(); hideCan(); setHint(''); });
+  function showPick() {
+    pickEl.hidden = false; $('pickF').hidden = true;
+    $('pickRow').hidden = false; pickEl.querySelector('h2').hidden = false;
+  }
+  pickBtn.addEventListener('click', function () { showPick(); det.pause(); hideCan(); setHint(''); showAdv(''); });
+  // レベル2: 弦のあとに、遊ぶ指（0・1・2）を1つ選ぶ
+  $('pickFRow').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var f = +b.getAttribute('data-f');
+    pickEl.hidden = true;
+    if (f !== FINGERS[0] || pendingStr !== cfg.string || finished) {
+      FINGERS[0] = f; cfg.l2f = f; cfg.string = pendingStr;
+      relabel(); saveCfg(); resetGame();
+    }
+    if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
+  });
+  var pendingStr = '';
   $('pickRow').addEventListener('click', function (e) {
     var b = e.target;
     while (b && b.tagName !== 'BUTTON') b = b.parentNode;
     if (!b) return;
     var s = b.getAttribute('data-str');
+    if (LEVEL === 2) {
+      pendingStr = s;
+      appEl.style.setProperty('--c', window.Tane.STRINGS[s].color);
+      $('pickRow').hidden = true; pickEl.querySelector('h2').hidden = true; $('pickF').hidden = false;
+      return;
+    }
     pickEl.hidden = true;
     // 同じ弦を選んだ時は、途中から続ける（「げんを かえる」を間違えて押した時のため）
     if (s !== cfg.string || finished) {
@@ -1366,7 +1488,7 @@
       var ev = evs[i];
       if (!ev || typeof ev !== 'object') continue;
       if (ev.type === 'water' && ev.key !== null && plots[ev.key]) {
-        if (plots[ev.key].done) { setHint('<span class="s">' + ev.key + '</span> は もう さいたよ'); hintUntil = t + 1800; }
+        if (plots[ev.key].done) { setHint('<span class="s">' + FINGERS[ev.key] + '</span> は もう さいたよ'); hintUntil = t + 1800; }
         else showCan(t, ev.key);
       } else if (ev.type === 'bloom' && plots[ev.key]) {
         bloomPlot(t, ev.key);
@@ -1393,6 +1515,16 @@
     }
     // 音が聞こえたら、1秒に届く前から音符が上がる（ほかの弦の音でも。トレモロの間は出さない。見た目だけ）
     if (!finished && d.gateOpen && d.state !== 'tremolo' && !reduceMotion) spawnNote(t, hearKey);
+
+    // 音程のアドバイス（レベル2〜4。開放弦の0は指で直せないので出さない）。0.25秒続いた時だけ出す
+    var adv = '';
+    if (LEVEL < 5 && !finished && d.gateOpen && d.state !== 'tremolo' && hearKey >= 0 && FINGERS[hearKey] !== 0 && d.heard && typeof d.heard.cents === 'number') {
+      if (d.heard.cents > ADV_CENTS) adv = 'down:' + hearKey;
+      else if (d.heard.cents < -ADV_CENTS) adv = 'up:' + hearKey;
+    }
+    if (adv !== advCand) { advCand = adv; advCandSince = t; }
+    if (advCand === '') { if (t - advCandSince >= 300) showAdv(''); }
+    else if (t - advCandSince >= 250) showAdv(advCand);
 
     // ヒント: 0.3秒続いた時だけ出す（一瞬の聞き違いで出したり消したりしない）
     var cand = '';
@@ -1648,6 +1780,8 @@
   // 試験用: ?string=A&autostart=1 で弦を選んだ状態から始める
   var qs = window.location.search;
   var qm = /[?&]string=([GDAE])(&|$)/.exec(qs);
+  var qf = /[?&]f=([0-2])(&|$)/.exec(qs);
+  if (qf && LEVEL === 2) { FINGERS[0] = +qf[1]; relabel(); det.setClassifier(makeClassifier()); }
   if (qm) { cfg.string = qm[1]; pickEl.hidden = true; resetGame(); }
   if (/[?&]autostart=1(&|$)/.test(qs)) setTimeout(startAudio, 60);
 })();

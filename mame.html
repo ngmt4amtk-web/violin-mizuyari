@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>まめのきを のばそう</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    color: #14361f; overflow: hidden; background: #8ed8ff;
+  }
+  #app { position: relative; height: 100vh; height: 100dvh; overflow: hidden; }
+
+  /* ---------- 上の表示 ---------- */
+  header {
+    position: absolute; z-index: 10; left: 0; right: 0; top: 0;
+    padding: calc(clamp(6px, 1.2vmin, 14px) + env(safe-area-inset-top)) clamp(10px, 2.4vmin, 28px) 0;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px; pointer-events: none;
+  }
+  #timer {
+    justify-self: start; display: flex; align-items: center; gap: .35em;
+    padding: .3em .8em .3em .35em; border-radius: 999px; background: rgba(255,255,255,.92);
+    box-shadow: 0 3px 10px rgba(20,60,40,.14);
+    font-size: clamp(14px, 2.6vmin, 24px); font-weight: 800; color: #14502f; white-space: nowrap;
+  }
+  #timer .ring { width: 2em; height: 2em; border-radius: 50%; background: conic-gradient(#ffb43b calc(var(--left, 1) * 360deg), #e4eee8 0); display: grid; place-items: center; }
+  #timer .ring b { width: 1.5em; height: 1.5em; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: .85em; color: #b4501d; font-variant-numeric: tabular-nums; }
+  #timer.hurry .ring { background: conic-gradient(#ff5d6c calc(var(--left, 1) * 360deg), #e4eee8 0); }
+  #timer.hurry .ring b { color: #d0283a; }
+  #heightBox { text-align: center; line-height: 1; }
+  #heightNum {
+    font-size: clamp(36px, 8.5vmin, 80px); font-weight: 900; color: #0c4b2c; font-variant-numeric: tabular-nums; white-space: nowrap;
+    text-shadow: 0 3px 0 #fff, 0 4px 14px rgba(255,255,255,.8);
+  }
+  #heightNum small { font-size: .42em; margin-left: .12em; }
+  #heightNum.bump { animation: hbump .35s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes hbump { 50% { scale: 1.15; } }
+  #heightBox.night #heightNum { color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.3), 0 0 16px rgba(120,170,255,.8); }
+  #zone { margin-top: .25em; font-size: clamp(13px, 2.3vmin, 20px); font-weight: 800; color: #14502f; text-shadow: 0 1px 0 #fff; }
+  #heightBox.night #zone { color: #dfe8ff; text-shadow: none; }
+  #best {
+    justify-self: end; padding: .35em .85em; border-radius: 999px; background: rgba(255,255,255,.92);
+    box-shadow: 0 3px 10px rgba(20,60,40,.14);
+    font-size: clamp(12px, 2.2vmin, 20px); font-weight: 800; color: #7a4a00; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- 舞台 ---------- */
+  #scene { position: absolute; inset: 0; z-index: 1; overflow: hidden; background: #8ed8ff; }
+  #stars { position: absolute; inset: -50% 0; opacity: 0; pointer-events: none;
+    background-image:
+      radial-gradient(2px 2px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1.6px 1.6px at 30% 62%, #fff 50%, transparent 51%),
+      radial-gradient(2.4px 2.4px at 52% 30%, #fff 50%, transparent 51%), radial-gradient(1.4px 1.4px at 70% 80%, #fff 50%, transparent 51%),
+      radial-gradient(2px 2px at 86% 22%, #fff 50%, transparent 51%), radial-gradient(1.6px 1.6px at 92% 58%, #fff 50%, transparent 51%),
+      radial-gradient(1.4px 1.4px at 8% 84%, #fff 50%, transparent 51%), radial-gradient(2px 2px at 44% 90%, #fff 50%, transparent 51%),
+      radial-gradient(1.2px 1.2px at 22% 40%, #fff 50%, transparent 51%), radial-gradient(1.8px 1.8px at 62% 50%, #fff 50%, transparent 51%);
+    background-size: 100% 50%;
+  }
+  /* 宇宙から見た地球（下からせり上がる） */
+  #earth { position: absolute; left: 50%; z-index: 0; pointer-events: none; opacity: 0; transform: translateX(-50%); }
+  #earth img, #earth span { display: block; width: 100%; height: 100%; object-fit: contain; }
+  #earth span { font-size: 1px; }
+  /* 速い時の流れる線 */
+  #speed { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .3s; overflow: hidden; }
+  #speed i { position: absolute; top: -40%; width: 3px; height: 30%; border-radius: 3px; background: linear-gradient(transparent, rgba(255,255,255,.85)); animation: streak linear infinite; }
+  @keyframes streak { to { transform: translateY(480%); } }
+
+  #world { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; transform-origin: 50% 100%; will-change: transform; z-index: 1; }
+  #world.zoom { transition: transform 1.6s cubic-bezier(.3,.9,.3,1); }
+  .ground {
+    position: absolute; left: -10%; right: -10%; bottom: -400px; height: calc(var(--groundH) + 400px);
+    background: linear-gradient(#b8e48e, #8fcf62); border-radius: 50% 50% 0 0 / 34px 34px 0 0; box-shadow: inset 0 4px 0 #a5dc74;
+  }
+  #mound, #moundFront {
+    position: absolute; left: 50%; bottom: calc(var(--groundH) - var(--moundH) * 0.45);
+    width: var(--moundW); height: var(--moundH); transform: translateX(-50%);
+    border-radius: 50% 50% 46% 46% / 72% 72% 28% 28%; overflow: hidden; z-index: 3;
+    background: linear-gradient(#a56e46 0%, #90603a 34%, #7d4f2c 78%);
+  }
+  #mound img, #moundFront img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #moundFront { z-index: 5; clip-path: inset(22% 0 0 0); }
+  #mound { box-shadow: 0 8px 18px rgba(60,40,20,.16); }
+  #vine {
+    position: absolute; left: 50%; z-index: 4; bottom: var(--baseY); width: var(--vw); height: 0; transform: translateX(-50%);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cpath d='M60 120 C 40 90 80 30 60 0' stroke='%23409a3e' stroke-width='13' fill='none'/%3E%3Cpath d='M60 120 C 40 90 80 30 60 0' stroke='%235cb85a' stroke-width='7' fill='none'/%3E%3Cpath d='M52 92 C 30 96 14 84 8 70 C 26 66 44 72 52 92 Z' fill='%2366bb6a' stroke='%23409a3e' stroke-width='2.5'/%3E%3Cpath d='M68 34 C 90 38 106 26 112 12 C 94 8 76 14 68 34 Z' fill='%234caf50' stroke='%23409a3e' stroke-width='2.5'/%3E%3Cpath d='M66 64 C 80 62 86 52 82 44 C 76 50 70 46 74 40' stroke='%2373c26f' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-y; background-size: var(--vw) var(--vw); background-position: 50% 100%;
+  }
+  #tip { position: absolute; left: 50%; z-index: 4; width: calc(var(--vw) * 1.15); height: calc(var(--vw) * 1.15); margin-left: calc(var(--vw) * -0.575); bottom: var(--baseY); transform-origin: 50% 100%; animation: breathe 2.6s ease-in-out infinite alternate; }
+  #tip svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  #tip.hear { animation: sway .42s ease-in-out infinite alternate; }
+  #tip.pop svg { animation: tipPop .5s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes breathe { from { rotate: -3deg; } to { rotate: 3deg; } }
+  @keyframes sway { from { rotate: -9deg; } to { rotate: 9deg; } }
+  @keyframes tipPop { 40% { transform: scale(1.35, .8); } 70% { transform: scale(.9, 1.18); } }
+  #seed { position: absolute; left: 50%; z-index: 4; bottom: calc(var(--baseY) - var(--vw) * 0.2); width: calc(var(--vw) * 1.3); height: calc(var(--vw) * 0.45); transform: translateX(-50%); transition: opacity .3s; }
+  #seed img { width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; display: block; }
+  #seed.hear img { animation: jiggle .12s linear infinite alternate; transform-origin: 50% 80%; }
+  @keyframes jiggle { from { rotate: -5deg; } to { rotate: 5deg; translate: 0 -3%; } }
+
+  /* 空のもの（絵が無い時は絵文字） */
+  .obj { position: absolute; z-index: 2; pointer-events: none; user-select: none; transform: translate(-50%, 50%); }
+  .obj .pic { display: block; width: 100%; height: 100%; }
+  .obj img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .obj .emo { display: block; line-height: 1; text-align: center; }
+  .obj.onground { transform: translateX(-50%); z-index: 2; }
+  .obj.front { z-index: 6; }
+  .obj.passed .pic { animation: objPop .6s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes objPop { 40% { transform: scale(1.25); } }
+  /* 横に飛ぶもの（鳥・飛行機・衛星など）。--dur で速さ、--dir で向き */
+  .obj.fly .pic { animation: flyX var(--dur, 9s) linear infinite; animation-delay: var(--del, 0s); }
+  @keyframes flyX { 0% { translate: calc(var(--dist) * -1) 0; } 100% { translate: var(--dist) 0; } }
+  .obj.bob .pic { animation: bob 3s ease-in-out infinite alternate; animation-delay: var(--del, 0s); }
+  @keyframes bob { from { translate: 0 -6%; } to { translate: 0 6%; } }
+  .obj.spin .pic { animation: spin 14s linear infinite; }
+  @keyframes spin { to { rotate: 360deg; } }
+  /* 鳥のはばたき（2コマ） */
+  .flap { position: relative; }
+  .flap img { position: absolute; inset: 0; }
+  .flap img.b { animation: flapB .32s steps(1) infinite; }
+  .flap img.a { animation: flapA .32s steps(1) infinite; }
+  @keyframes flapA { 0% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes flapB { 0% { opacity: 0; } 50% { opacity: 1; } }
+
+  /* 高さの目盛り（右の端） */
+  #ruler { position: absolute; right: 0; top: 0; bottom: 0; width: 90px; z-index: 3; pointer-events: none; }
+  #ruler i { position: absolute; right: 0; height: 3px; width: 22px; background: rgba(255,255,255,.85); border-radius: 2px; }
+  #ruler b { position: absolute; right: 28px; transform: translateY(-50%); font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,40,80,.5); white-space: nowrap; }
+
+  #combo {
+    position: absolute; z-index: 8; left: 50%; top: 0; pointer-events: none;
+    padding: .25em .7em; border-radius: 999px; background: #fff; white-space: nowrap;
+    font-size: clamp(15px, 2.8vmin, 26px); font-weight: 900; color: var(--cc, #2f9e5f);
+    box-shadow: 0 3px 0 var(--cc, #2f9e5f), 0 6px 14px rgba(0,0,0,.15);
+    opacity: 0; transform: translate(0, -50%) scale(.6); transition: opacity .2s, transform .25s cubic-bezier(.3,1.6,.5,1);
+  }
+  #combo.on { opacity: 1; transform: translate(0, -50%) scale(1); }
+  #combo.bump { animation: bump .3s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes bump { 50% { scale: 1.25; } }
+  #notes { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 7; pointer-events: none; }
+  #notes i {
+    position: absolute; left: 0; top: 0; font-style: normal; font-weight: 900; font-size: var(--ns, 30px); line-height: 1; color: var(--nc, #ff8fb3);
+    -webkit-text-stroke: 1.5px #fff; paint-order: stroke fill; text-shadow: 0 3px 0 rgba(255,255,255,.95), 0 4px 10px rgba(30,80,120,.25);
+    animation: noteUp 1.3s cubic-bezier(.25,.6,.4,1) forwards;
+  }
+  @keyframes noteUp {
+    0% { transform: translate(var(--nx0), -50%) scale(.3); opacity: 0; }
+    15% { transform: translate(calc(var(--nx0) + var(--nw) * .3), -80%) scale(1.15) rotate(var(--nr)); opacity: 1; }
+    100% { transform: translate(calc(var(--nx0) + var(--nw)), var(--ny)) scale(.9) rotate(calc(var(--nr) * -1)); opacity: 0; }
+  }
+  #toast {
+    position: absolute; z-index: 9; left: 50%; top: 24%; pointer-events: none;
+    padding: .35em 1em; border-radius: 999px; background: #fff7d6; color: #8a4b00; white-space: nowrap;
+    font-size: clamp(18px, 3.8vmin, 34px); font-weight: 900; box-shadow: 0 4px 0 #f2c14e, 0 8px 18px rgba(0,0,0,.15);
+    opacity: 0; transform: translate(-50%, 10px) scale(.8);
+  }
+  #toast.big { background: #2a2f6e; color: #fff; box-shadow: 0 4px 0 #ffd75e, 0 8px 22px rgba(0,0,0,.3); font-size: clamp(24px, 5.2vmin, 46px); }
+  #toast.go { animation: toast 1.8s ease-out both; }
+  @keyframes toast {
+    0% { opacity: 0; transform: translate(-50%, 10px) scale(.7); }
+    15% { opacity: 1; transform: translate(-50%, 0) scale(1.12); }
+    25% { transform: translate(-50%, 0) scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -16px) scale(1); }
+  }
+  #hint {
+    position: absolute; z-index: 9; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    padding: .35em .95em; border-radius: 999px; background: rgba(255,255,255,.94); color: #2b6b4a;
+    font-size: clamp(14px, 2.6vmin, 22px); font-weight: 800; white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(20,60,40,.12); opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  #hint.show { opacity: 1; }
+
+  #result {
+    position: absolute; z-index: 11; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.6);
+    width: min(460px, calc(100% - 32px)); padding: clamp(14px, 3vmin, 26px) 16px;
+    border-radius: 26px; background: rgba(255,255,255,.96); text-align: center;
+    box-shadow: 0 8px 0 rgba(20,80,47,.2), 0 18px 40px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .3s, transform .45s cubic-bezier(.3,1.5,.5,1);
+  }
+  #result.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  #result .a { font-size: clamp(15px, 2.6vmin, 22px); font-weight: 800; color: #3c6a50; }
+  #result .h { font-size: clamp(44px, 10vmin, 92px); font-weight: 900; color: #0c4b2c; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #result .h small { font-size: .42em; }
+  #result .z { font-size: clamp(16px, 3vmin, 26px); font-weight: 900; color: #2470b8; }
+  #result .b { font-size: clamp(18px, 3.4vmin, 30px); font-weight: 900; color: #2f7d4f; }
+  #result .rec { margin-top: .4em; font-size: clamp(16px, 3vmin, 26px); font-weight: 900; color: #d0283a; }
+  #result .rec.old { color: #7a4a00; font-size: clamp(13px, 2.3vmin, 19px); }
+  #confetti { position: absolute; inset: 0; z-index: 10; pointer-events: none; overflow: hidden; }
+  #confetti i { position: absolute; top: -20px; width: 10px; height: 16px; border-radius: 3px; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translate(var(--cx), 110vh) rotate(var(--cr)); } }
+
+  footer {
+    position: absolute; z-index: 12; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: clamp(8px, 1.8vmin, 18px);
+    padding: 10px 12px calc(clamp(10px, 2vmin, 18px) + env(safe-area-inset-bottom));
+  }
+  #mainBtn {
+    font-family: inherit; font-size: clamp(18px, 3.2vmin, 28px); font-weight: 800;
+    padding: .5em 1.6em; border: none; border-radius: 999px; background: #ffd75e; color: #5a3a00;
+    box-shadow: 0 5px 0 #e0a800, 0 8px 16px rgba(90,58,0,.18); cursor: pointer;
+  }
+  #mainBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #e0a800; }
+  #mainBtn:disabled { background: #d7ecdd; color: #3f6b50; box-shadow: 0 5px 0 #b3d3bd; cursor: default; transform: none; }
+  #mainBtn.again { background: #ff9db5; color: #6a1430; box-shadow: 0 5px 0 #e0688a, 0 8px 16px rgba(106,20,48,.18); }
+  .pills { display: flex; gap: 6px; }
+  .pills button { font-family: inherit; font-size: clamp(14px, 2.4vmin, 20px); font-weight: 800; padding: .45em .8em; border-radius: 999px; border: 3px solid #2f7d4f; background: #fff; color: #2f7d4f; cursor: pointer; }
+  .pills button.on { background: #2f7d4f; color: #fff; }
+  .pills button:disabled { opacity: .45; cursor: default; }
+  #homeBtn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 800; width: clamp(38px, 6vmin, 52px); height: clamp(38px, 6vmin, 52px); border-radius: 50%; border: 3px solid #2f7d4f; background: #fff; font-size: clamp(18px, 2.8vmin, 24px); color: #2f7d4f; }
+  [hidden] { display: none !important; }
+  #micErr { position: fixed; left: 50%; top: calc(80px + env(safe-area-inset-top)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); background: #fff6f2; border: 2px solid #e6a08a; border-radius: 14px; padding: 12px 14px; z-index: 40; font-size: clamp(12px, 1.6vmin, 15px); line-height: 1.55; color: #7a2a12; box-shadow: 0 10px 28px rgba(0,0,0,.18); display: none; }
+  #micErr.show { display: block; }
+  #micErr .t { font-weight: 800; margin-bottom: 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #tip, #tip.hear, #tip.pop svg, #seed.hear img, .obj .pic, .obj.passed .pic, #combo.bump, #toast.go, #heightNum.bump, .flap img { animation: none !important; }
+    .flap img.b { opacity: 0; }
+    #toast.go { opacity: 1; transform: translate(-50%, 0); }
+    #notes, #confetti, #speed { display: none; }
+    #world.zoom { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <main id="scene">
+    <div id="stars"></div>
+    <div id="earth"><img alt="" src="images/mame/earth.png"></div>
+    <div id="world">
+      <div id="objs"></div>
+      <div class="ground"></div>
+      <div id="mound"><img alt="" src="images/soil.png" onerror="this.remove()"></div>
+      <div id="seed"><img alt="" src="images/seed.png" onerror="this.remove()"></div>
+      <div id="vine"></div>
+      <div id="tip" aria-hidden="true">
+        <svg viewBox="0 0 100 100">
+          <path d="M50 100 C 48 80 56 62 50 44 C 46 30 56 20 64 24 C 70 28 66 38 58 36" stroke="#409a3e" stroke-width="7" fill="none" stroke-linecap="round"/>
+          <path d="M50 100 C 48 80 56 62 50 44 C 46 30 56 20 64 24 C 70 28 66 38 58 36" stroke="#5cb85a" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+          <path d="M50 70 C 34 74 22 66 18 54 C 32 50 46 56 50 70 Z" fill="#7ccf6e" stroke="#409a3e" stroke-width="2.5"/>
+          <path d="M52 56 C 66 58 76 50 80 40 C 66 36 54 42 52 56 Z" fill="#66bb6a" stroke="#409a3e" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <div id="moundFront"><img alt="" src="images/soil.png" onerror="this.remove()"></div>
+    </div>
+    <div id="speed" aria-hidden="true"></div>
+    <div id="ruler"></div>
+    <div id="notes" aria-hidden="true"></div>
+    <div id="combo"></div>
+    <div id="toast"></div>
+    <div id="confetti" aria-hidden="true"></div>
+    <div id="hint"></div>
+  </main>
+
+  <header>
+    <div id="timer"><span class="ring"><b id="timerNum">20</b></span><span>びょう</span></div>
+    <div id="heightBox"><div id="heightNum">0<small>m</small></div><div id="zone"></div></div>
+    <div id="best">さいこう <span id="bestNum">-</span></div>
+  </header>
+
+  <div id="result" aria-live="polite">
+    <div class="a"><span id="rLimit">20</span>びょうで</div>
+    <div class="h" id="rH">0<small>m</small></div>
+    <div class="z" id="rZ"></div>
+    <div class="b">のびたよ！</div>
+    <div class="rec" id="rRec"></div>
+  </div>
+
+  <footer>
+    <a id="homeBtn" href="index.html" aria-label="メニューへ">&#8592;</a>
+    <div class="pills" id="pills"><button type="button" data-s="20">20びょう</button><button type="button" data-s="30">30びょう</button></div>
+    <button id="mainBtn" type="button">はじめる</button>
+  </footer>
+
+  <div id="micErr"><div class="t" id="micErrTitle"></div><div id="micErrSub"></div></div>
+</div>
+
+<script>
+// 伸ばし音の判定（水やりゲームの核）。app.html にも同じ中身を埋め込む。
+// マイクの生の波形を少しずつ受け取り、10ミリ秒ごとに「伸ばしている音か」を決める。
+// 録音はしない。直近1秒ぶんの数値だけを手元に置き、古いものは捨てる。
+(function (root) {
+  'use strict';
+
+  var DEFAULTS = {
+    waterStartSec: 1.0,   // この秒数だけ伸びたら水が出る（本人の言葉: 1秒）
+    bloomSec: 30,         // 合計でこの秒数伸ばしたら花が咲く（本人の言葉: 30秒）
+    onDb: -45,            // これより大きい音を「鳴っている」とみなす（dBFS）
+    tremoloDipDb: 6,      // 音量がこれだけ落ちて戻ったら「弓の返し」1回とみなす
+    tremoloDips: 2,       // 0.7秒の中に返しがこの回数以上あればトレモロ
+    tremoloWindowSec: 0.7,
+    gapHoldSec: 0.15,     // 弓を返す一瞬の途切れはここまで許す
+    minClarity: 0.6       // 音の高さがはっきりしている度合い（0〜1）。雑音や息を外す
+  };
+
+  var RANGES = {
+    waterStartSec: [0.1, 10], bloomSec: [1, 3600], onDb: [-100, 0],
+    tremoloDipDb: [1, 40], tremoloDips: [1, 20], tremoloWindowSec: [0.2, 2],
+    gapHoldSec: [0, 1], minClarity: [0, 1]
+  };
+
+  function toDb(meanSq) { return meanSq > 1e-18 ? 10 * Math.log10(meanSq) : -120; }
+
+  function Detector(sampleRate, opts) {
+    this.sr = sampleRate;
+    this.opt = {};
+    for (var k in DEFAULTS) this.opt[k] = DEFAULTS[k];
+    if (opts) this.setOptions(opts);
+    this.blockLen = Math.round(sampleRate * 0.01);
+    this.blockSec = this.blockLen / sampleRate;
+    this.anaLen = 1024 * Math.max(1, Math.round(sampleRate / 48000));
+    if (this.anaLen < 1024) this.anaLen = 1024;
+    this.ring = new Float32Array(this.anaLen);
+    this.ringPos = 0;
+    this.blockBuf = new Float32Array(this.blockLen);
+    this.blockFill = 0;
+    this.blockIndex = 0;
+    this.minLag = Math.floor(sampleRate / 3500);
+    this.maxLag = Math.ceil(sampleRate / 180);
+    this.classify = null;      // レベル2: 音の高さ → どのタネか（無ければレベル1の数え方）
+    this.reset();
+  }
+
+  // レベル2で使う。fn(高さHz) が {key: タネの番号 か null, heard: 画面に出す聞こえ方} を返す。
+  // 渡すと、秒数をタネごとに分けて数え、違う音に変わったら伸ばしを1秒からやり直す。
+  Detector.prototype.setClassifier = function (fn) {
+    this.classify = typeof fn === 'function' ? fn : null;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
+  };
+
+  Detector.prototype.setOptions = function (o) {
+    for (var k in o) {
+      var v = Number(o[k]);
+      if (k in DEFAULTS && isFinite(v)) this.opt[k] = v;
+    }
+    // 0や負の数などで止まったり壊れたりしないよう、値を範囲に収める
+    var R = RANGES;
+    for (var key in R) {
+      var x = this.opt[key];
+      if (x < R[key][0]) x = R[key][0];
+      if (x > R[key][1]) x = R[key][1];
+      this.opt[key] = x;
+    }
+    this.opt.tremoloDips = Math.round(this.opt.tremoloDips);
+  };
+
+  // 途中で音の処理が止まった時に呼ぶ。今の伸ばしは終わりにし、貯まった秒数と回数は残す。
+  Detector.prototype.pause = function () {
+    this._endStroke();
+    this.state = 'idle';
+    this.gateOpen = false;
+    this.tremolo = false;
+    this.dipTimes = [];
+    this.pitchHist = [];
+    this.vibrato = false;
+    this.dipState = 'high';
+    this.peak = -120;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
+  };
+
+  Detector.prototype.reset = function () {
+    this.now = 0;
+    this.total = 0;            // 今の花に向けて貯まった秒数（確定分＋仮置き分。画面に出す値）
+    this.committed = 0;        // 確定した秒数。花はこれで咲かせる
+    this.blooms = 0;           // 咲かせた回数
+    this.waters = 0;           // 水が出た回数
+    this.stroke = 0;           // 今の伸ばしの秒数（鳴っている時間だけ数える）
+    this.qualified = false;    // 今の伸ばしが水の秒数を越えたか
+    this.gap = 0;
+    this.gateOpen = false;
+    this.env = -120;
+    this.clarity = 0;
+    this.pitch = 0;
+    this.pitchCoarse = 0;
+    this.tremolo = false;
+    this.dipState = 'high';
+    this.peak = -120;
+    this.trough = 0;
+    this.dipTimes = [];
+    this.pitchHist = [];
+    this.vibrato = false;
+    this.lowSince = 0;
+    this.accrual = [];         // 仮置きの [時刻, 秒数]。トレモロと分かったら取り消し、古くなったら確定する
+    this.state = 'idle';       // idle | rising | watering | tremolo
+    this.events = [];          // 'water' | 'bloom' | 'tremolo' を UI へ渡す（レベル2は {type, key}）
+    // レベル2（タネごと）
+    this.noteHist = [];        // 直近0.12秒の高さ。真ん中の値でタネを決める
+    this.key = null;           // 今鳴っている音のタネ（どれでもなければ null）
+    this.heard = null;         // 今の音がどう聞こえたか（画面の「いまのは〜」用）
+    this.strokeKey = null;     // 今の伸ばしのタネ
+    this.committedBy = {};     // タネごとの確定した秒数
+    this.totalBy = {};         // タネごとの秒数（仮置きを含む。画面に出す値）
+    this.bloomedBy = {};       // 咲いたタネ
+  };
+
+  // 波形を受け取る。長さは何でもよい。
+  Detector.prototype.feed = function (samples) {
+    for (var i = 0; i < samples.length; i++) {
+      var s = samples[i];
+      this.ring[this.ringPos] = s;
+      this.ringPos = (this.ringPos + 1) % this.anaLen;
+      this.blockBuf[this.blockFill++] = s;
+      if (this.blockFill === this.blockLen) {
+        this.blockFill = 0;
+        this._block();
+      }
+    }
+  };
+
+  Detector.prototype._clarity = function () {
+    // McLeod の NSDF（正規化した自己相関）で、周期のはっきりさと高さを見る。
+    var n = this.anaLen, x = new Float32Array(n), p = this.ringPos, i;
+    for (i = 0; i < n; i++) x[i] = this.ring[(p + i) % n];
+    var maxLag = Math.min(this.maxLag, n >> 1);
+    var nsdf = new Float32Array(maxLag + 2);
+    for (var tau = 0; tau <= maxLag + 1; tau++) {
+      var acf = 0, m = 0;
+      for (i = 0; i + tau < n; i++) {
+        acf += x[i] * x[i + tau];
+        m += x[i] * x[i] + x[i + tau] * x[i + tau];
+      }
+      nsdf[tau] = m > 0 ? 2 * acf / m : 0;
+    }
+    // 最初に負へ下がった後の山を集める。はっきりさは、いちばん高い山で決める。
+    var t = 1;
+    while (t <= maxLag && nsdf[t] > 0) t++;
+    var best = 0, bestLag = 0, peaks = [];
+    for (; t <= maxLag; t++) {
+      if (t >= this.minLag && nsdf[t] > nsdf[t - 1] && nsdf[t] >= nsdf[t + 1]) {
+        peaks.push(t);
+        if (nsdf[t] > best) { best = nsdf[t]; bestLag = t; }
+      }
+    }
+    // ビブラートの見分け（レベル1の数え方）には、前の版と同じ粗い高さを使う。
+    // 細かい高さに替えると、揺れの測り方が変わってトレモロの判定まで変わるため。
+    this.pitchCoarse = bestLag ? this.sr / bestLag : 0;
+    // 音の高さは、いちばん高い山の9割を越える最初の山で決める（McLeod の方法）。
+    // いちばん高い山をそのまま使うと、1オクターブ下に聞き違えることがある。
+    var lag = 0;
+    for (var k = 0; k < peaks.length; k++) { if (nsdf[peaks[k]] >= best * 0.9) { lag = peaks[k]; break; } }
+    if (lag) {
+      // 山の頂を放物線で細かく求める（高い音ほど1サンプルの差が大きいので）
+      var a = nsdf[lag - 1], b = nsdf[lag], c = nsdf[lag + 1], den = a - 2 * b + c;
+      var shift = den !== 0 ? 0.5 * (a - c) / den : 0;
+      if (shift > 0.5) shift = 0.5; else if (shift < -0.5) shift = -0.5;
+      this.pitch = this.sr / (lag + shift);
+    } else {
+      this.pitch = 0;
+    }
+    return best;
+  };
+
+  Detector.prototype._block = function () {
+    var o = this.opt, b = this.blockBuf, half = b.length >> 1, s1 = 0, s2 = 0, i;
+    for (i = 0; i < half; i++) s1 += b[i] * b[i];
+    for (; i < b.length; i++) s2 += b[i] * b[i];
+    var db = toDb((s1 + s2) / b.length);
+    this.env = db;
+    this.blockIndex++;
+    if (this.blockIndex % 2 === 0) {
+      this.clarity = db > o.onDb - 6 ? this._clarity() : 0;
+      this._trackPitch();
+      if (this.classify) this._trackNote(db);
+    }
+
+    // 鳴っているか（入りと切れに6dBの幅をつけて、ばたつきを抑える）
+    if (this.gateOpen) { if (db < o.onDb - 6) this.gateOpen = false; }
+    else if (db > o.onDb) this.gateOpen = true;
+
+    // 弓の返しの谷は短い（20〜40ミリ秒）ので、5ミリ秒きざみで見る
+    this.now += this.blockSec / 2;
+    this._trackDips(toDb(s1 / half));
+    this.now += this.blockSec / 2;
+    this._trackDips(toDb(s2 / (b.length - half)));
+
+    // トレモロか: 0.7秒の中に弓の返し（音量の谷）が何回あるか
+    var win = o.tremoloWindowSec, now = this.now;
+    while (this.dipTimes.length && this.dipTimes[0] < now - win) this.dipTimes.shift();
+    var wasTrem = this.tremolo;
+    this.tremolo = this.dipTimes.length >= o.tremoloDips;
+    if (this.tremolo && !wasTrem) this._onTremolo();
+
+    // トレモロと分かるまでの遅れ（窓の長さ＋0.2秒）より古い分を確定し、確定分だけで花を咲かせる
+    var hold = win + 0.2;
+    while (this.accrual.length && this.accrual[0][0] < now - hold) {
+      var ac = this.accrual.shift();
+      this.committed += ac[1];
+      if (this.classify) this.committedBy[ac[2]] = (this.committedBy[ac[2]] || 0) + ac[1];
+    }
+    if (!this.classify) {
+      while (this.committed >= o.bloomSec) {
+        this.committed -= o.bloomSec;
+        this.blooms++;
+        this._emit('bloom');
+      }
+    } else {
+      // タネごとに、確定した秒数が開花の秒数に届いたら1回だけ咲かせる
+      for (var bk in this.committedBy) {
+        if (!this.bloomedBy[bk] && this.committedBy[bk] >= o.bloomSec) {
+          this.bloomedBy[bk] = true;
+          this.blooms++;
+          this._emit({ type: 'bloom', key: Number(bk) });
+        }
+      }
+    }
+
+    var voiced = this.gateOpen && this.clarity >= o.minClarity && !this.tremolo &&
+                 (!this.classify || this.key !== null);
+    // レベル2: 違うタネの音に変わったら、伸ばしを1秒からやり直す
+    if (voiced && this.classify) {
+      if (this.stroke > 0 && this.strokeKey !== this.key) this._endStroke();
+      if (this.stroke === 0) this.strokeKey = this.key;
+    }
+    if (this.tremolo) {
+      this._endStroke();
+      this.state = 'tremolo';
+    } else if (voiced) {
+      this.gap = 0;
+      this.stroke += this.blockSec;
+      if (!this.qualified) {
+        this.state = 'rising';
+        if (this.stroke >= o.waterStartSec) {
+          this.qualified = true;
+          this.waters++;
+          this._emit(this.classify ? { type: 'water', key: this.strokeKey } : 'water');
+          // 水が出るまでの1秒も伸ばした時間として数える（10ミリ秒ずつ、もとの時刻で置く）
+          var n = Math.round(this.stroke / this.blockSec);
+          for (var j = n - 1; j >= 0; j--) this._add(this.blockSec, now - j * this.blockSec);
+        }
+      } else {
+        this.state = 'watering';
+        this._add(this.blockSec, now);
+      }
+    } else {
+      this.gap += this.blockSec;
+      if (this.gap > o.gapHoldSec) { this._endStroke(); this.state = 'idle'; }
+    }
+    this._sumTotal();
+  };
+
+  Detector.prototype._sumTotal = function () {
+    var p = 0;
+    for (var i = 0; i < this.accrual.length; i++) p += this.accrual[i][1];
+    this.total = this.committed + p;
+    if (this.classify) {
+      var by = {};
+      for (var k in this.committedBy) by[k] = this.committedBy[k];
+      for (var j = 0; j < this.accrual.length; j++) {
+        var e = this.accrual[j];
+        by[e[2]] = (by[e[2]] || 0) + e[1];
+      }
+      this.totalBy = by;
+    }
+  };
+
+  Detector.prototype._emit = function (e) {
+    this.events.push(e);
+    if (this.events.length > 50) this.events.shift();   // 画面が止まっていても溜めすぎない
+  };
+
+  Detector.prototype._add = function (sec, time) {
+    this.accrual.push([time, sec, this.strokeKey]);
+  };
+
+  Detector.prototype._endStroke = function () {
+    this.stroke = 0;
+    this.qualified = false;
+    this.gap = 0;
+  };
+
+  Detector.prototype._trackDips = function (db) {
+    // 音量の山から tremoloDipDb 以上落ち、谷から6割戻ったら「谷1つ」。
+    // 山はゆっくり下がる（1秒で30dB）ので、だんだん弱くする音は谷にならない。
+    // 谷が0.3秒より長ければ、弓の返しではなく休み（数えない）。
+    // ビブラートは音量も少し揺れるので、音の高さが揺れている間は谷の基準を3dB深くする。
+    var d = this.opt.tremoloDipDb + (this.vibrato ? 3 : 0), on = this.opt.onDb;
+    if (this.dipState === 'high') {
+      this.peak = Math.max(db, this.peak - 0.15);
+      if (this.peak > on && db < this.peak - d) { this.dipState = 'low'; this.trough = db; this.lowSince = this.now; }
+    } else {
+      if (db < this.trough) this.trough = db;
+      if (db > this.trough + d * 0.6 && db > on - 6) {
+        this.dipState = 'high';
+        this.peak = db;
+        if (this.now - this.lowSince <= 0.3) this.dipTimes.push(this.now);
+      } else if (this.now - this.lowSince > 0.3 && db < on - 6) {
+        this.dipState = 'high';
+        this.peak = db;
+      }
+    }
+  };
+
+  Detector.prototype._trackPitch = function () {
+    // 直近0.5秒の音の高さ（はっきりした所だけ）の揺れ幅をセントで見る。
+    // 20セント以上揺れていればビブラート。トレモロは同じ高さのままなので揺れない。
+    var ph = this.pitchHist;
+    if (this.clarity >= 0.8 && this.pitchCoarse > 0) ph.push([this.now, 1200 * Math.log2(this.pitchCoarse / 440)]);
+    while (ph.length && ph[0][0] < this.now - 0.5) ph.shift();
+    if (ph.length < 10) { this.vibrato = false; return; }
+    var c = ph.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; });
+    var lo = c[Math.floor(c.length * 0.1)], hi = c[Math.floor(c.length * 0.9)];
+    var med = c[c.length >> 1];
+    // 半音以上の動き（音が変わった）はビブラートと呼ばない
+    this.vibrato = (hi - lo) >= 20 && (hi - lo) <= 100 && Math.abs(hi - med) < 60;
+  };
+
+  Detector.prototype._onTremolo = function () {
+    // トレモロと分かる前に数えてしまった分を取り消す（最初の谷の少し前から）。
+    // 取り消すのはまだ仮置きの分だけ。確定した分と咲いた回数には触らない。
+    var from = this.dipTimes[0] - 0.2;
+    this.accrual = this.accrual.filter(function (e) { return e[0] < from; });
+    this._sumTotal();
+    this._emit(this.classify ? { type: 'tremolo', key: null } : 'tremolo');
+  };
+
+  Detector.prototype._trackNote = function (db) {
+    // 直近0.12秒の、はっきりした高さの真ん中の値でタネを決める。
+    // 弾き始めのゆれや、1コマだけの聞き違いで別のタネへ飛ばないようにする。
+    var nh = this.noteHist;
+    if (db > this.opt.onDb - 6 && this.clarity >= this.opt.minClarity && this.pitch > 0) nh.push([this.now, this.pitch]);
+    while (nh.length && nh[0][0] < this.now - 0.12) nh.shift();
+    if (nh.length < 3) { this.key = null; this.heard = null; return; }
+    var f = nh.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; })[nh.length >> 1];
+    var r = this.classify(f);
+    this.key = (r && r.key !== null && r.key !== undefined) ? r.key : null;
+    this.heard = r ? (r.heard || null) : null;
+  };
+
+  Detector.prototype.takeEvents = function () {
+    var e = this.events; this.events = []; return e;
+  };
+
+  Detector.DEFAULTS = DEFAULTS;
+  root.SustainDetector = Detector;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Detector;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  function $(id) { return document.getElementById(id); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  /* ---------- 設定（音の見分けはレベル1・2と同じ値を読む。ここでは書かない） ---------- */
+  var cfg = { waterStartSec: 0.5, onDb: -55, tremoloDipDb: 6, bloomSec: 3600 };
+  (function () {
+    try {
+      var o = JSON.parse(window.localStorage.getItem('wg_cfg_v1') || 'null');
+      if (!o || typeof o !== 'object') return;
+      var old = o.defV !== 3;
+      if (typeof o.waterStartSec === 'number' && isFinite(o.waterStartSec)) { var w = clamp(Math.round(o.waterStartSec * 10) / 10, 0.5, 2); if (!(old && w === 1)) cfg.waterStartSec = w; }
+      if (typeof o.onDb === 'number' && isFinite(o.onDb)) { var db = clamp(Math.round(o.onDb), -70, -20); if (!(old && db === -45)) cfg.onDb = db; }
+      if (typeof o.tremoloDipDb === 'number' && isFinite(o.tremoloDipDb)) cfg.tremoloDipDb = clamp(o.tremoloDipDb, 4, 9);
+    } catch (e) { /* 初期値で動く */ }
+  })();
+  // 制限時間（20秒が初期値。本人 2026-11-04「20秒かな？30秒もあっても良い」）と、制限時間ごとの自己ベスト（本人「残す」）
+  var LIMITS = [20, 30];
+  var limit = 20, best = {};
+  try {
+    var c3 = JSON.parse(window.localStorage.getItem('wg3_cfg_v1') || 'null');
+    if (c3 && LIMITS.indexOf(c3.limit) >= 0) limit = c3.limit;
+    var b3 = JSON.parse(window.localStorage.getItem('wg3_best_v2') || 'null');
+    if (b3 && typeof b3 === 'object') LIMITS.forEach(function (s) { if (typeof b3[s] === 'number' && isFinite(b3[s]) && b3[s] > 0) best[s] = b3[s]; });
+  } catch (e) { /* 無視 */ }
+  function saveLimit() { try { window.localStorage.setItem('wg3_cfg_v1', JSON.stringify({ limit: limit })); } catch (e) { /* 無視 */ } }
+  function saveBest() { try { window.localStorage.setItem('wg3_best_v2', JSON.stringify(best)); } catch (e) { /* 無視 */ } }
+
+  var det = new window.SustainDetector(48000, cfg);
+
+  /* ---------- 伸び方 ----------
+     「のびる力」L を貯め、高さは h = K × (e^L − 1)（m）。L が一定に増えると高さはどんどん速く増える（ぐんぐん遠くへ）。
+     画面は L に比例して上がる（いつも同じ速さで景色が流れ、長い音ほど速く流れる）。
+     - 伸ばしている音（水やりと同じ決まり）: 数えた秒 × R × 速さの倍率（1本が長く続くほど上がる。最大4倍。本人「長く続くほど加速」）
+     - トレモロ: 1秒あたり R × 0.35（本人「トレモロでも多少伸びては良い、その代わり伸ばしてる方がより伸びる」） */
+  var K = 10, R = 0.17, TREM = 0.35, ACC = 0.5, MAXMULT = 4;
+  function multFor(stroke) { return Math.min(MAXMULT, 1 + ACC * Math.max(0, stroke)); }
+  function hOf(L) { return K * (Math.exp(L) - 1); }
+  function LOf(h) { return Math.log(1 + h / K); }
+
+  // 目印。m = 高さ（メートル）。img = images/mame/ の絵（無ければ e の絵文字）。n があれば越えた時に知らせる
+  var IMG = 'images/mame/';
+  var OBJS = [
+    { m: 0, img: 'house', e: '\u{1F3E0}', n: 'おうちの やね', nm: 3.2, ground: true, x: 20, w: 3.4 },
+    { m: 0, img: 'tree', e: '\u{1F333}', n: 'きの てっぺん', nm: 6, ground: true, x: 80, w: 4.2 },
+    { m: 10, img: 'butterfly', e: '\u{1F98B}', n: 'ちょうちょ', x: 30, w: 0.9, bob: 1 },
+    { m: 18, img: 'bird', e: '\u{1F426}', x: 70, w: 1.0, fly: 1, dur: 7 },
+    { m: 25, img: 'bird', e: '\u{1F426}', n: 'ことりの むれ', x: 28, w: 1.1, fly: 1, dur: 6 },
+    { m: 33, img: 'bird', e: '\u{1F426}', x: 64, w: 0.8, fly: 1, dur: 8 },
+    { m: 45, img: 'bird', e: '\u{1F426}', x: 40, w: 0.9, fly: 1, dur: 6.5 },
+    { m: 60, img: 'balloons', e: '\u{1F388}', n: 'ふうせん', x: 72, w: 1.2, bob: 1 },
+    { m: 110, img: 'cloud2', e: '☁️', x: 22, w: 2.0 },
+    { m: 150, img: 'cloud1', e: '☁️', n: 'くも', x: 70, w: 3.2, front: 1 },
+    { m: 190, img: 'cloud3', e: '☁️', x: 30, w: 3.0, front: 1 },
+    { m: 240, img: 'cloud1', e: '☁️', x: 80, w: 2.4 },
+    { m: 320, img: 'hotair', e: '\u{1F388}', n: 'ききゅう', x: 26, w: 1.6, bob: 1 },
+    { m: 450, img: 'cloud2', e: '☁️', x: 66, w: 2.2, front: 1 },
+    { m: 650, img: 'cloud3', e: '☁️', x: 24, w: 3.0 },
+    { m: 1000, img: 'plane', e: '✈️', n: 'ひこうき', x: 70, w: 1.8, fly: 1, dur: 9 },
+    { m: 1600, img: 'cloud1', e: '☁️', x: 30, w: 2.6, front: 1 },
+    { m: 3000, img: 'mountain', e: '\u{1F3D4}️', n: 'やまの てっぺん', x: 78, w: 2.8 },
+    { m: 3000, img: 'cloud1', e: '\u2601\uFE0F', x: 74, w: 4.8, dy: -1.25, front: 1 },
+    { m: 3000, img: 'cloud2', e: '\u2601\uFE0F', x: 90, w: 2.8, dy: -1.0, front: 1 },
+    { m: 5500, img: 'cloud3', e: '☁️', x: 26, w: 2.6 },
+    { m: 10000, img: 'jet', e: '✈️', n: 'ジェットき', x: 30, w: 2.0, fly: 1, dur: 7 },
+    { m: 30000, img: 'comet', e: '☄️', n: 'ながれぼし', x: 72, w: 1.8, fly: 1, dur: 5 },
+    { m: 100000, img: 'rocket', e: '\u{1F680}', n: 'うちゅう！', big: 1, x: 24, w: 1.6, bob: 1 },
+    { m: 160000, img: 'star', e: '⭐', x: 80, w: 0.7, spin: 1 },
+    { m: 400000, img: 'satellite', e: '\u{1F6F0}️', n: 'じんこうえいせい', x: 72, w: 1.6, fly: 1, dur: 12 },
+    { m: 700000, img: 'astronaut', e: '\u{1F468}‍\u{1F680}', n: 'うちゅうひこうし', x: 28, w: 1.3, bob: 1 },
+    { m: 2e6, img: 'star', e: '⭐', x: 66, w: 0.6, spin: 1 },
+    { m: 5e6, img: 'ufo', e: '\u{1F6F8}', n: 'UFO', x: 30, w: 1.6, bob: 1 },
+    { m: 2e7, img: 'star', e: '⭐', x: 76, w: 0.8, spin: 1 },
+    { m: 3.84e8, img: 'moon', e: '\u{1F315}', n: 'おつきさま', big: 1, x: 68, w: 3.0 },
+    { m: 3e9, img: 'star', e: '⭐', x: 26, w: 0.7, spin: 1 },
+    { m: 1.2e12, img: 'saturn', e: '\u{1FA90}', n: 'どせい', big: 1, x: 34, w: 3.2 }
+  ];
+  // 高さの区切りの名前（上の真ん中に小さく出す）
+  var ZONES = [[0, 'にわ'], [12, 'そら'], [120, 'くもの たかさ'], [2000, 'たかい そら'], [12000, 'そらの いちばん うえ'], [100000, 'うちゅう'], [3e8, 'つきの ちかく'], [1e9, 'とおい うちゅう']];
+  function zoneAt(h) { var z = ZONES[0][1]; for (var i = 0; i < ZONES.length; i++) if (h >= ZONES[i][0]) z = ZONES[i][1]; return z; }
+  // 空の色（高さ m → 色）
+  var SKY = [[0, [142, 216, 255]], [500, [110, 196, 250]], [5000, [70, 140, 222]], [30000, [34, 64, 150]], [100000, [10, 16, 50]], [1e12, [4, 6, 24]]];
+  function skyAt(h) {
+    var x = LOf(h);
+    for (var i = 1; i < SKY.length; i++) {
+      var a = SKY[i - 1], b = SKY[i], xa = LOf(a[0]), xb = LOf(b[0]);
+      if (x <= xb) { var t = (x - xa) / (xb - xa); return 'rgb(' + [0, 1, 2].map(function (k) { return Math.round(a[1][k] + (b[1][k] - a[1][k]) * t); }).join(',') + ')'; }
+    }
+    return 'rgb(' + SKY[SKY.length - 1][1].join(',') + ')';
+  }
+  // 高さの読み方: 〜999 m、1〜9999 km、1万 km〜
+  function fmt(h) {
+    if (h < 10) return { n: h.toFixed(1), u: 'm' };
+    if (h < 1000) return { n: String(Math.floor(h)), u: 'm' };
+    var km = h / 1000;
+    if (km < 10) return { n: km.toFixed(1), u: 'km' };
+    if (km < 10000) return { n: Math.floor(km).toLocaleString('ja-JP'), u: 'km' };
+    var man = km / 10000;
+    if (man < 10000) return { n: (man < 100 ? man.toFixed(1) : Math.floor(man).toLocaleString('ja-JP')) + 'まん', u: 'km' };
+    return { n: (man / 10000).toFixed(1) + 'おく', u: 'km' };
+  }
+
+  /* ---------- 画面の部品 ---------- */
+  var app = $('app'), scene = $('scene'), world = $('world'), vine = $('vine'), tip = $('tip'), seed = $('seed');
+  var objsEl = $('objs'), ruler = $('ruler'), notesEl = $('notes'), combo = $('combo'), speedEl = $('speed');
+  var toast = $('toast'), hint = $('hint'), result = $('result'), mainBtn = $('mainBtn'), pills = $('pills');
+  var timerEl = $('timer'), timerNum = $('timerNum'), heightNum = $('heightNum'), heightBox = $('heightBox'), bestNum = $('bestNum'), zoneEl = $('zone');
+  var stars = $('stars'), confetti = $('confetti'), earth = $('earth');
+  (function () { for (var i = 0; i < 14; i++) { var s = document.createElement('i'); s.style.left = (4 + (i * 53) % 92) + '%'; s.style.animationDuration = (0.5 + (i % 4) * 0.12) + 's'; s.style.animationDelay = (-(i % 5) * 0.13) + 's'; speedEl.appendChild(s); } })();
+
+  var G = {};
+  function layout() {
+    var H = scene.clientHeight || 700, W = scene.clientWidth || 400;
+    G.H = H; G.W = W;
+    G.P = H * 0.75;                                   // 「のびる力」1あたりの画面の長さ（px）
+    G.unit = clamp(Math.min(H, W * 1.3) / 9, 40, 110); // 絵の大きさの基準（目印の w は、この何倍か）
+    G.groundH = clamp(H * 0.17, 90, 190);
+    G.vw = clamp(G.unit * 1.1, 52, 120);
+    G.moundW = clamp(W * 0.5, 220, 520); G.moundH = G.moundW * 0.22;
+    G.baseY = G.groundH - G.moundH * 0.45 + G.moundH * 0.78;
+    var st = app.style;
+    st.setProperty('--groundH', G.groundH + 'px'); st.setProperty('--vw', G.vw + 'px');
+    st.setProperty('--moundW', G.moundW + 'px'); st.setProperty('--moundH', G.moundH + 'px'); st.setProperty('--baseY', G.baseY + 'px');
+    var es = Math.min(W * 1.6, H * 1.4);
+    earth.style.width = es + 'px'; earth.style.height = es + 'px';
+    buildObjs();
+    render(true);
+  }
+  function yOfH(h) { return G.baseY + LOf(h) * G.P; }
+  function picHtml(o) {
+    if (o.img === 'bird') return '<span class="pic flap"><img class="a" alt="" src="' + IMG + 'bird_up.png"><img class="b" alt="" src="' + IMG + 'bird_down.png"></span>';
+    return '<span class="pic"><img alt="" src="' + IMG + o.img + '.png"></span>';
+  }
+  // 飾り（いつも何かが通り過ぎるように）: くもの高さに雲、うちゅうに小さな星
+  var DECO = (function () {
+    var a = [], i = 0, x;
+    for (x = LOf(70); x < LOf(9000); x += 0.42, i++) a.push({ m: hOf(x), img: ['cloud1', 'cloud2', 'cloud3'][i % 3], e: '\u2601\uFE0F', x: i % 2 ? 14 + (i * 7) % 18 : 70 + (i * 11) % 18, w: 1.4 + (i % 3) * 0.6, front: i % 4 === 1 });
+    for (x = LOf(60000), i = 0; x < LOf(5e12); x += 0.55, i++) a.push({ m: hOf(x), img: 'star', e: '\u2B50', x: i % 2 ? 12 + (i * 13) % 26 : 64 + (i * 17) % 26, w: 0.35 + (i % 3) * 0.15, spin: 1 });
+    return a;
+  })();
+  var objEls = [];
+  function buildObjs() {
+    objsEl.innerHTML = ''; objEls = [];
+    OBJS.concat(DECO).forEach(function (o, i) {
+      var el = document.createElement('div');
+      el.className = 'obj' + (o.ground ? ' onground' : '') + (o.front ? ' front' : '') + (o.fly ? ' fly' : '') + (o.bob ? ' bob' : '') + (o.spin ? ' spin' : '');
+      var w = o.w * G.unit;
+      el.style.width = Math.round(w) + 'px'; el.style.height = Math.round(o.ground ? w * 1.05 : w) + 'px';
+      el.style.left = o.x + '%';
+      el.style.bottom = Math.round(o.ground ? G.groundH - 8 : yOfH(o.m) + (o.dy || 0) * G.unit) + 'px';
+      if (o.fly) { el.style.setProperty('--dur', o.dur + 's'); el.style.setProperty('--dist', Math.round(G.W * 0.6) + 'px'); el.style.setProperty('--del', (-(i * 1.7) % o.dur) + 's'); }
+      else el.style.setProperty('--del', (-(i * 0.9) % 3) + 's');
+      el.innerHTML = picHtml(o);
+      // 絵が無い時は絵文字にする
+      var imgs = el.querySelectorAll('img');
+      for (var k = 0; k < imgs.length; k++) imgs[k].addEventListener('error', (function (box, e, ww) { return function () {
+        var p = box.querySelector('.pic'); if (!p || p.getAttribute('data-emo')) return;
+        p.setAttribute('data-emo', '1'); p.className = p.className.replace('flap', '');
+        p.innerHTML = '<span class="emo" style="font-size:' + Math.round(ww * 0.86) + 'px">' + e + '</span>';
+      }; })(el, o.e, w));
+      objsEl.appendChild(el); objEls.push(el);
+    });
+  }
+
+  /* ---------- 状態 ---------- */
+  var phase = 'ready';      // ready（最初の音を待つ）| play | done
+  var L = 0;                // のびる力
+  var credited = 0;         // 判定器の合計秒数のうち、伸びにした分
+  var elapsed = 0, camY = 0, lastNow = 0, lastDet = null;
+  var passedFlags = [];
+  var lastMeterIdx = 0;
+  var hearShown = false, lastReached = '';
+
+  function setPills() {
+    var bs = pills.querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) { var s = +bs[i].getAttribute('data-s'); bs[i].classList.toggle('on', s === limit); bs[i].disabled = phase === 'play'; }
+    if (best[limit]) { var f = fmt(best[limit]); bestNum.textContent = f.n + f.u; } else bestNum.textContent = '-';
+    if (phase === 'ready') { timerNum.textContent = String(limit); timerEl.style.setProperty('--left', '1'); timerEl.classList.remove('hurry'); }
+  }
+  pills.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b || phase === 'play') return;
+    limit = +b.getAttribute('data-s'); saveLimit();
+    if (phase === 'done') resetGame(); else setPills();
+  });
+  function showToast(txt, big) {
+    toast.textContent = txt; toast.classList.toggle('big', !!big);
+    toast.classList.remove('go'); void toast.offsetWidth; toast.classList.add('go');
+  }
+  function setHint(txt) { if (hint.textContent !== (txt || '')) hint.textContent = txt || ''; hint.classList.toggle('show', !!txt); }
+
+  var nextNoteAt = 0, noteN = 0;
+  var NOTE_CH = ['♪︎', '♫︎', '♪︎', '♬︎'];
+  var NOTE_COL = ['#ff7fa8', '#ffb43b', '#4fb4ee', '#6cc04a', '#b07cf0'];
+  function spawnNote(t, x, y) {
+    if (reduceMotion || t < nextNoteAt || notesEl.childElementCount > 14) return;
+    nextNoteAt = t + 220; noteN++;
+    var side = (noteN % 2) ? 1 : -1, el = document.createElement('i');
+    el.textContent = NOTE_CH[noteN % NOTE_CH.length];
+    el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px';
+    el.style.setProperty('--nx0', Math.round(side * (20 + Math.random() * 40)) + 'px');
+    el.style.setProperty('--nw', Math.round(side * (30 + Math.random() * 60)) + 'px');
+    el.style.setProperty('--ny', Math.round(G.H * (0.12 + Math.random() * 0.15)) + 'px');   // 景色といっしょに下へ流れる
+    el.style.setProperty('--nr', Math.round(side * (8 + Math.random() * 14)) + 'deg');
+    el.style.setProperty('--nc', NOTE_COL[noteN % NOTE_COL.length]);
+    el.style.setProperty('--ns', Math.round(clamp(G.H * 0.06, 22, 50) * (0.85 + Math.random() * 0.4)) + 'px');
+    el.addEventListener('animationend', function () { if (el.parentNode) el.parentNode.removeChild(el); });
+    notesEl.appendChild(el);
+  }
+  function popTip() { if (reduceMotion) return; tip.classList.remove('pop'); void tip.offsetWidth; tip.classList.add('pop'); }
+  function bumpHeight() { if (reduceMotion) return; heightNum.classList.remove('bump'); void heightNum.offsetWidth; heightNum.classList.add('bump'); }
+
+  /* ---------- 描く ---------- */
+  var lastSky = '', lastHtxt = '', lastNight = null, lastRulerKey = '', lastZone = '', lastEarth = -1, lastStars = -1;
+  function render(force) {
+    var px = L * G.P, h = hOf(L);
+    vine.style.height = px.toFixed(1) + 'px';
+    tip.style.bottom = (G.baseY + px - G.vw * 0.12).toFixed(1) + 'px';
+    seed.style.opacity = L > 0.03 ? '0' : '1';
+    if (!world.classList.contains('zoom')) {
+      var target = Math.max(0, G.baseY + px - G.H * 0.55);
+      camY += (target - camY) * (force ? 1 : 0.2);
+      world.style.transform = 'translateY(' + camY.toFixed(1) + 'px)';
+    }
+    var midH = hOf(Math.max(0, (camY + G.H * 0.5 - G.baseY) / G.P));
+    var sky = skyAt(midH);
+    if (sky !== lastSky) { lastSky = sky; scene.style.backgroundColor = sky; }
+    var st = clamp((LOf(midH) - LOf(15000)) / (LOf(120000) - LOf(15000)), 0, 1);
+    if (Math.abs(st - lastStars) > 0.01) { lastStars = st; stars.style.opacity = st.toFixed(2); }
+    stars.style.transform = 'translateY(' + ((camY * 0.08) % (G.H)).toFixed(1) + 'px)';
+    var night = midH > 40000;
+    if (night !== lastNight) { lastNight = night; heightBox.classList.toggle('night', night); }
+    // 宇宙では、地球が下からせり上がる（高いほど小さく遠くへ）
+    var eo = clamp((LOf(h) - LOf(60000)) / (LOf(250000) - LOf(60000)), 0, 1);
+    var far = clamp((LOf(h) - LOf(250000)) / (LOf(4e8) - LOf(250000)), 0, 1);
+    if (Math.abs(eo + far * 7 - lastEarth) > 0.005 || force) {
+      lastEarth = eo + far * 7;
+      earth.style.opacity = eo.toFixed(2);
+      earth.style.bottom = (-parseFloat(earth.style.height) * (0.78 - 0.18 * eo + 0.25 * far)).toFixed(1) + 'px';
+      earth.style.transform = 'translateX(-50%) scale(' + (1 - 0.55 * far).toFixed(3) + ')';
+    }
+    var f = fmt(h), ht = f.n + '|' + f.u;
+    if (ht !== lastHtxt) { lastHtxt = ht; heightNum.innerHTML = f.n + '<small>' + f.u + '</small>'; }
+    var z = zoneAt(h);
+    if (z !== lastZone) { lastZone = z; zoneEl.textContent = z; }
+    drawRuler(force);
+  }
+  // 右の端の目盛り: 1・2・5 × 10の何乗 m のきりのいい高さ
+  var NICE = (function () { var a = []; for (var p = 0; p <= 12; p++) [1, 2, 5].forEach(function (k) { a.push(k * Math.pow(10, p)); }); return a; })();
+  function drawRuler(force) {
+    var key = Math.round(camY / 2) + ':' + G.H;
+    if (!force && key === lastRulerKey) return;
+    lastRulerKey = key;
+    var html = '';
+    for (var i = 0; i < NICE.length; i++) {
+      var y = G.H - (yOfH(NICE[i]) - camY);
+      if (y < 40 || y > G.H - 20) continue;
+      var f = fmt(NICE[i]);
+      html += '<i style="top:' + y.toFixed(1) + 'px"></i><b style="top:' + y.toFixed(1) + 'px">' + f.n + f.u + '</b>';
+    }
+    ruler.innerHTML = html;
+  }
+
+  /* ---------- 毎コマ ---------- */
+  var lastCombo = '';
+  function frame(t) {
+    requestAnimationFrame(frame);
+    var d = det;
+    d.takeEvents();
+    // 時間は音の時刻（判定器が処理した音の秒）で数える。タブを裏に回しても音の処理が続けば正しく進み、止まれば止まる
+    var nowA = d.now;
+    if (d !== lastDet) { lastDet = d; lastNow = nowA; }
+    var adt = Math.max(0, nowA - lastNow); lastNow = nowA;
+    var trem = d.state === 'tremolo';
+    var hearing = phase !== 'done' && (d.state === 'rising' || d.state === 'watering' || trem);
+
+    if (phase === 'ready' && hearing) { phase = 'play'; elapsed = 0; adt = 0; credited = d.total; setPills(); setHint(''); }
+    // 制限時間を越えた分の音は伸びにしない（裏にいた間にまとめて進んだ時のため）
+    var frac = 1;
+    if (phase === 'play') {
+      var prevE = elapsed; elapsed += adt;
+      if (elapsed > limit) frac = adt > 0 ? clamp((limit - prevE) / adt, 0, 1) : 0;
+    }
+
+    var mult = 1;
+    if (phase === 'play') {
+      if (d.total > credited) {
+        var add = d.total - credited; credited = d.total;
+        // 増えた分の真ん中の時点の倍率を使う（画面のコマの速さで結果が変わらないように）
+        mult = d.state === 'watering' ? multFor(d.stroke - add / 2) : 1;
+        L += add * R * mult * frac;
+      } else if (d.total < credited) {
+        credited = d.total;   // トレモロで取り消された分（伸びは戻さない。次に増えた分から数える）
+      }
+      if (trem) L += adt * R * TREM * frac;
+      var left = Math.max(0, limit - elapsed);
+      timerNum.textContent = String(Math.ceil(left - 1e-6));
+      timerEl.style.setProperty('--left', (left / limit).toFixed(3));
+      timerEl.classList.toggle('hurry', left <= 5);
+      if (left <= 0) { finish(); return; }
+    } else if (phase === 'ready') {
+      credited = d.total;
+    }
+
+    // 伸びる速さの表示と、速い時の流れる線
+    var cm = (phase === 'play' && d.state === 'watering') ? multFor(d.stroke) : 1;
+    var ctext = '';
+    if (cm >= 3.5) ctext = 'びゅーん ×' + cm.toFixed(1);
+    else if (cm >= 2.5) ctext = 'もりもり ×' + cm.toFixed(1);
+    else if (cm >= 1.5) ctext = 'ぐんぐん ×' + cm.toFixed(1);
+    if (ctext !== lastCombo) {
+      var lvChanged = ctext.slice(0, 3) !== lastCombo.slice(0, 3);
+      lastCombo = ctext;
+      combo.classList.toggle('on', !!ctext);
+      if (ctext) {
+        combo.textContent = ctext;
+        combo.style.setProperty('--cc', cm >= 3.5 ? '#d0283a' : cm >= 2.5 ? '#e07a00' : '#2f9e5f');
+        if (lvChanged && !reduceMotion) { combo.classList.remove('bump'); void combo.offsetWidth; combo.classList.add('bump'); }
+      }
+    }
+    speedEl.style.opacity = cm >= 2 ? String(clamp((cm - 2) / 2, 0.25, 0.9)) : '0';
+
+    if (hearing !== hearShown) { hearShown = hearing; tip.classList.toggle('hear', hearing); seed.classList.toggle('hear', hearing); }
+    if (phase === 'ready') setHint('ひいたら スタート！');
+    else if (trem && phase === 'play') setHint('のばすと もっと のびるよ');
+    else if (phase === 'play') setHint('');
+
+    render(false);
+    var tipY = G.H - (G.baseY + L * G.P - camY);
+    if (hearing) spawnNote(t, G.W / 2, tipY);
+    combo.style.left = (G.W / 2 + G.vw * 0.8) + 'px';
+    combo.style.top = clamp(tipY + 6, 110, G.H - 120) + 'px';
+
+    // きりのいい高さを越えるたびに、先っぽがはずみ、数字がはねる
+    var h = hOf(L);
+    var mi = 0; while (mi < NICE.length && NICE[mi] <= h) mi++;
+    if (mi > lastMeterIdx) { lastMeterIdx = mi; popTip(); bumpHeight(); }
+    checkPasses(h);
+  }
+
+  // 目印を越えたら知らせる（おしまいの直前のコマでも拾う）
+  function checkPasses(h) {
+    for (var i = 0; i < OBJS.length; i++) {
+      var o = OBJS[i], need = o.nm || o.m;
+      if (!passedFlags[i] && o.n && h >= need) {
+        passedFlags[i] = true; objEls[i].classList.add('passed');
+        lastReached = o.n;
+        showToast(o.big ? o.n : o.n + 'を こえた！', !!o.big);
+      }
+    }
+  }
+
+  /* ---------- おしまい・もういちど ---------- */
+  function finish() {
+    phase = 'done';
+    det.pause();
+    setHint('');
+    tip.classList.remove('hear'); seed.classList.remove('hear'); hearShown = false;
+    combo.classList.remove('on'); lastCombo = ''; speedEl.style.opacity = '0';
+    var h = hOf(L);
+    checkPasses(h);
+    var prev = best[limit] || 0, rec = $('rRec'), f = fmt(h);
+    $('rLimit').textContent = String(limit);
+    $('rH').innerHTML = f.n + '<small>' + f.u + '</small>';
+    $('rZ').textContent = lastReached ? lastReached.replace('！', '') + 'まで とどいた！' : '';
+    if (h > prev && h >= 0.1) {
+      best[limit] = h; saveBest();
+      var pf = fmt(prev);
+      rec.className = 'rec'; rec.textContent = prev > 0 ? 'さいこう きろく！（まえは ' + pf.n + pf.u + '）' : 'さいこう きろく！';
+      throwConfetti();
+    } else {
+      var bf = fmt(prev);
+      rec.className = 'rec old'; rec.textContent = prev > 0 ? 'さいこうは ' + bf.n + bf.u : '';
+    }
+    timerNum.textContent = '0'; timerEl.style.setProperty('--left', '0');
+    // つる全体が見えるように、世界を縮める
+    var total = G.baseY + L * G.P + G.vw * 1.2;
+    var s = clamp((G.H * 0.6) / total, 0.08, 1);
+    world.classList.add('zoom');
+    world.style.transform = 'translateY(' + (-G.H * 0.05).toFixed(1) + 'px) scale(' + s.toFixed(3) + ')';
+    result.classList.add('show');
+    mainBtn.textContent = 'もういちど'; mainBtn.disabled = false; mainBtn.classList.add('again');
+    setPills();
+  }
+  function resetGame() {
+    phase = 'ready'; L = 0; det.reset(); credited = 0; elapsed = 0; lastMeterIdx = 0; passedFlags = []; lastReached = '';
+    objEls.forEach(function (el) { el.classList.remove('passed'); });
+    notesEl.innerHTML = ''; confetti.innerHTML = '';
+    result.classList.remove('show');
+    world.classList.remove('zoom'); camY = 0;
+    mainBtn.classList.remove('again');
+    syncBtn(); setPills(); render(true);
+  }
+  function throwConfetti() {
+    if (reduceMotion) return;
+    var cols = ['#ff7fa8', '#ffd75e', '#4fb4ee', '#6cc04a', '#b07cf0', '#ff9d3b'], html = '';
+    for (var i = 0; i < 70; i++) {
+      html += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;background:' + cols[i % cols.length] +
+        ';animation-duration:' + (1.8 + Math.random() * 1.6).toFixed(2) + 's;animation-delay:' + (Math.random() * 0.6).toFixed(2) +
+        's;--cx:' + Math.round((Math.random() - .5) * 160) + 'px;--cr:' + Math.round(Math.random() * 900) + 'deg"></i>';
+    }
+    confetti.innerHTML = html;
+  }
+
+  /* ---------- マイク（レベル1と同じ作り。開いたらすぐ聞き始める） ---------- */
+  var audio = { ctx: null, stream: null, src: null, sp: null, mute: null };
+  var starting = false, everRan = false, micFailed = false, testMode = false;
+  function reasonOf(err) {
+    var n = (err && err.name) || '';
+    if (n === 'NotAllowedError' || n === 'SecurityError') return 'マイクの使用が許可されていません';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'マイクが見つかりません';
+    if (n === 'NotReadableError' || n === 'TrackStartError') return 'マイクがほかのアプリで使われています';
+    if (err && err.message) return String(err.message);
+    return 'はっきりしない理由';
+  }
+  function showMicError(reason) {
+    micFailed = true;
+    $('micErrTitle').textContent = 'マイクが使えません: ' + reason;
+    $('micErrSub').textContent = 'https://ngmt4amtk-web.github.io/violin-mizuyari/ から開くと、マイクを使えます。';
+    $('micErr').classList.add('show');
+  }
+  function syncBtn() {
+    if (phase === 'done') return;
+    var ctx = audio.ctx;
+    if (ctx && ctx.state === 'running') { everRan = true; mainBtn.textContent = 'きいているよ'; mainBtn.disabled = true; }
+    else { mainBtn.textContent = (ctx && everRan) ? 'つづける' : 'はじめる'; mainBtn.disabled = starting; }
+  }
+  function teardown() {
+    if (audio.stream) { try { audio.stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) { /* 無視 */ } }
+    audio.ctx = audio.stream = audio.src = audio.sp = audio.mute = null;
+  }
+  function startAudio() {
+    if (starting) return;
+    if (audio.ctx) { if (audio.ctx.state !== 'running') audio.ctx.resume().catch(function () {}); return; }
+    $('micErr').classList.remove('show');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showMicError('このブラウザではマイクを使えません'); return; }
+    if (window.isSecureContext === false) { showMicError('安全でない接続のためマイクを使えません'); return; }
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { showMicError('このブラウザでは音の処理ができません'); return; }
+    var ctx0 = new AC();
+    ctx0.resume().catch(function () {});
+    starting = true; syncBtn();
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).then(function (stream) {
+      starting = false;
+      audio.stream = stream; audio.ctx = ctx0;
+      var ctx = ctx0;
+      if (typeof ctx.createScriptProcessor !== 'function') throw new Error('ScriptProcessor が使えません');
+      var src = ctx.createMediaStreamSource(stream), sp = ctx.createScriptProcessor(2048, 1, 1), mute = ctx.createGain();
+      mute.gain.value = 0;
+      det = new window.SustainDetector(ctx.sampleRate, cfg); wg.detector = det; credited = 0;
+      sp.onaudioprocess = function (e) { if (phase === 'done') return; det.feed(e.inputBuffer.getChannelData(0)); };
+      ctx.onstatechange = function () { if (ctx.state !== 'running' && ctx.state !== 'closed') det.pause(); syncBtn(); };
+      stream.getAudioTracks().forEach(function (tr) {
+        tr.addEventListener('ended', function () { det.pause(); try { ctx.close(); } catch (e) {} teardown(); syncBtn(); showMicError('マイクが切れました'); });
+      });
+      src.connect(sp); sp.connect(mute); mute.connect(ctx.destination);
+      audio.src = src; audio.sp = sp; audio.mute = mute;
+      syncBtn();
+      ctx.resume().catch(function () {});
+    }).catch(function (err) {
+      starting = false;
+      if (!audio.sp) { teardown(); try { ctx0.close(); } catch (e) {} }
+      syncBtn();
+      showMicError(reasonOf(err));
+    });
+  }
+  mainBtn.addEventListener('click', function () {
+    if (phase === 'done') { resetGame(); if (!audio.ctx || audio.ctx.state !== 'running') startAudio(); return; }
+    micFailed = false; startAudio();
+  });
+  document.addEventListener('pointerdown', function (e) {
+    if (phase === 'done' || micFailed) return;
+    if (e.target.closest && e.target.closest('button, a, input')) return;
+    if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
+  });
+
+  /* ---------- 試験用の口 ---------- */
+  var wg = {
+    detector: det, audio: audio,
+    getState: function () {
+      return { phase: phase, L: +L.toFixed(3), height: +hOf(L).toFixed(1), elapsed: +elapsed.toFixed(2), limit: limit, best: best, total: det.total, state: det.state,
+        stroke: det.stroke, button: mainBtn.textContent + (mainBtn.disabled ? '(押せない)' : '(押せる)'), reached: lastReached };
+    }
+  };
+  window.__wg = wg;
+
+  /* ---------- 起こし ---------- */
+  window.addEventListener('resize', function () { layout(); });
+  layout(); setPills(); syncBtn();
+  requestAnimationFrame(frame);
+  if (/[?&]test=1(&|$)/.test(window.location.search)) testMode = true;
+  if (!/[?&]nomic=1(&|$)/.test(window.location.search)) setTimeout(startAudio, 60);
+})();
+</script>
+</body>
+</html>

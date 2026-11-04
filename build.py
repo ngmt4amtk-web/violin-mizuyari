@@ -1,4 +1,4 @@
-# yubi.src.html と app.html に detector.js・tane.js をそのまま埋め込む
+# yubi.src.html と app.html・mame.html に detector.js・tane.js をそのまま埋め込む
 import re, pathlib
 here = pathlib.Path(__file__).parent
 det = (here/'detector.js').read_text(encoding='utf-8')
@@ -11,4 +11,8 @@ app = (here/'app.html').read_text(encoding='utf-8')
 i = app.index('<script>\n') + len('<script>\n'); j = app.index('</script>', i)
 app = app[:i] + det + '\n' + app[j:]
 (here/'app.html').write_text(app, encoding='utf-8')
+mame = (here/'mame.html').read_text(encoding='utf-8')
+i = mame.index('<script>\n') + len('<script>\n'); j = mame.index('</script>', i)
+mame = mame[:i] + det + '\n' + mame[j:]
+(here/'mame.html').write_text(mame, encoding='utf-8')
 print('ok')

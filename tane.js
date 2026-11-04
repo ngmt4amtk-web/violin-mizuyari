@@ -19,7 +19,7 @@
   var PC = ['ド', 'ド♯', 'レ', 'レ♯', 'ミ', 'ファ', 'ファ♯', 'ソ', 'ソ♯', 'ラ', 'ラ♯', 'シ'];
   function noteName(midi) { return PC[((midi % 12) + 12) % 12]; }
 
-  // opts = {string:'A', high2:{G:true,D:true,A:true,E:true}, tolCents:90, a4:442}
+  // opts = {string:'A', high2:{G:true,D:true,A:true,E:true}, tolCents:90, a4:442, fingers:[0,1,2]（レベル2〜4だけ）}
   function make(opts) {
     var chosen = opts.string;
     var tol = opts.tolCents || 90;
@@ -37,6 +37,38 @@
     for (var f0 = 0; f0 < 5; f0++) add(chosen, f0);
     for (var f1 = 0; f1 < 5; f1++) {
       for (var i = 0; i < ORDER.length; i++) if (ORDER[i] !== chosen) add(ORDER[i], f1);
+    }
+
+    // レベル2〜4（opts.fingers に遊ぶ指の一覧）: 音程はかなりゆるく見る（本人 2026-11-04「音程はかなりゆるくて良い」）。
+    // 選んだ弦の 0〜4 の指のうち、いちばん近い指で決める（ほかの弦の半音で狭めない）。tol より離れていれば外れ。
+    // いちばん近い指が遊ぶ指なら、その指の一覧の中の番号（タネの番号）を key にする。遊ばない指なら「いまのは ◯」
+    if (opts.fingers) {
+      var act = opts.fingers.slice();
+      var own = [];
+      for (var f2 = 0; f2 < 5; f2++) own.push({ str: chosen, finger: f2, midi: STRINGS[chosen].midi + fingerSteps(high2[chosen] !== false)[f2] });
+      var fnA = function (hz) {
+        if (!(hz > 0)) return { key: null, heard: null };
+        var mf = 69 + 12 * Math.log2(hz / a4);
+        var bo = null, bd = 1e9;
+        for (var j = 0; j < own.length; j++) {
+          var d = (mf - own[j].midi) * 100;
+          if (Math.abs(d) < Math.abs(bd)) { bd = d; bo = own[j]; }
+        }
+        if (bo && Math.abs(bd) <= tol) {
+          var ki = act.indexOf(bo.finger);
+          return { key: ki >= 0 ? ki : null, heard: { str: chosen, finger: bo.finger, midi: bo.midi, cents: bd } };
+        }
+        // 選んだ弦のどの指からも遠い: ほかの弦の音として名前を出す
+        var bestO = null, bestOD = 1e9;
+        for (var k = 0; k < cand.length; k++) {
+          var d2 = (mf - cand[k].midi) * 100;
+          if (Math.abs(d2) < Math.abs(bestOD)) { bestOD = d2; bestO = cand[k]; }
+        }
+        if (!bestO || Math.abs(bestOD) > 60 || bestO.str === chosen) return { key: null, heard: { off: true, cents: bd } };
+        return { key: null, heard: { str: bestO.str, finger: bestO.finger, midi: bestO.midi, cents: bestOD } };
+      };
+      fnA.targets = act.map(function (f) { return own[f]; });
+      return fnA;
     }
 
     var fn = function (hz) {
