@@ -473,8 +473,8 @@
       <h2>せってい（おとなのひと）</h2>
 
       <div class="row">
-        <div class="lab"><span>タネ1つが咲くまでの秒数</span><span class="val"><output id="seedOut">15</output> 秒</span></div>
-        <input type="range" id="seedIn" min="3" max="60" step="1" value="15">
+        <div class="lab"><span>タネ1つが咲くまでの秒数</span><span class="val"><output id="seedOut">5</output> 秒</span></div>
+        <input type="range" id="seedIn" min="3" max="60" step="1" value="5">
       </div>
 
       <div class="row">
@@ -504,13 +504,13 @@
       </div>
 
       <div class="row">
-        <div class="lab"><span>水が出るまでの秒数</span><span class="val"><output id="waterOut">1.0</output> 秒</span></div>
-        <input type="range" id="waterIn" min="0.5" max="2" step="0.1" value="1">
+        <div class="lab"><span>水が出るまでの秒数</span><span class="val"><output id="waterOut">0.5</output> 秒</span></div>
+        <input type="range" id="waterIn" min="0.5" max="2" step="0.1" value="0.5">
       </div>
 
       <div class="row">
-        <div class="lab"><span>音の大きさのしきい値</span><span class="val"><output id="onDbOut">-45</output> dB</span></div>
-        <input type="range" id="onDbIn" min="-70" max="-20" step="1" value="-45">
+        <div class="lab"><span>音の大きさのしきい値</span><span class="val"><output id="onDbOut">-55</output> dB</span></div>
+        <input type="range" id="onDbIn" min="-70" max="-20" step="1" value="-55">
         <div class="meterWrap"><div id="meterFill"></div><div id="meterMark"></div></div>
         <div class="meterScale"><span>-70 dB</span><span>-45</span><span>-20 dB</span></div>
         <div class="note">メーターが線を越えると音として数えます。レベル1と同じ値を使います。</div>
@@ -1036,8 +1036,9 @@
   var SEEDS = 5;
 
   var cfg = {
-    waterStartSec: 1.0, onDb: -45, tremoloDipDb: 6,
-    seedSec: 15, tol: 90, a4: 442, string: '',
+    // 初期値: タネ1つ5秒・水0.5秒・しきい値-55dB（本人 2026-11-04「しきい値デフォルト低くして、開花まで5秒がデフォルト、0.5秒で水が出るようにしよう」）
+    waterStartSec: 0.5, onDb: -55, tremoloDipDb: 6,
+    seedSec: 5, tol: 90, a4: 442, string: '',
     high2: { G: true, D: true, A: true, E: true }
   };
 
@@ -1048,14 +1049,17 @@
   function num(v) { return typeof v === 'number' && isFinite(v); }
   function readCfg() {
     var s = readJson(SHARED_KEY);
+    // 前の版が残した値のうち、その版の初期値と同じもの（水1.0秒・しきい値-45・タネ15秒）は、選んだ値か初期値のままか
+    // 見分けられないので、今の初期値に読み替える（前の版は弦を選ぶだけで全部を保存していた）。今の版の値は印つき（defV / v: 3）
     if (s) {
-      if (num(s.waterStartSec)) cfg.waterStartSec = clamp(Math.round(s.waterStartSec * 10) / 10, 0.5, 2);
-      if (num(s.onDb)) cfg.onDb = clamp(Math.round(s.onDb), -70, -20);
+      var oldS = s.defV !== 3;
+      if (num(s.waterStartSec)) { var w = clamp(Math.round(s.waterStartSec * 10) / 10, 0.5, 2); if (!(oldS && w === 1)) cfg.waterStartSec = w; }
+      if (num(s.onDb)) { var db = clamp(Math.round(s.onDb), -70, -20); if (!(oldS && db === -45)) cfg.onDb = db; }
       if (num(s.tremoloDipDb)) cfg.tremoloDipDb = clamp(s.tremoloDipDb, 4, 9);
     }
     var o = readJson(OWN_KEY);
     if (o) {
-      if (num(o.seedSec)) cfg.seedSec = clamp(Math.round(o.seedSec), 3, 60);
+      if (num(o.seedSec)) { var sd = clamp(Math.round(o.seedSec), 3, 60); if (!(o.v !== 3 && sd === 15)) cfg.seedSec = sd; }
       if (o.tol === 40 || o.tol === 60 || o.tol === 90) cfg.tol = o.tol;
       if (num(o.a4)) cfg.a4 = clamp(Math.round(o.a4), 440, 443);
       if (typeof o.string === 'string' && /^[GDAE]$/.test(o.string)) cfg.string = o.string;
@@ -1068,10 +1072,16 @@
     try {
       // レベル1の値（開花の秒数など）は残したまま、共通の3つだけ書き換える
       var s = readJson(SHARED_KEY) || {};
+      // 印をつける前に、レベル1の開花の秒数が前の版の初期値のままなら消す（レベル1が今の初期値を使えるように）
+      if (s.defV !== 3 && num(s.bloomSec)) {
+        var b = Math.round(s.bloomSec);
+        if ((s.bloomV === 2 && b === 10) || (s.bloomV !== 2 && b === 30)) delete s.bloomSec;
+      }
+      s.defV = 3;
       s.waterStartSec = cfg.waterStartSec; s.onDb = cfg.onDb; s.tremoloDipDb = cfg.tremoloDipDb;
       window.localStorage.setItem(SHARED_KEY, JSON.stringify(s));
       window.localStorage.setItem(OWN_KEY, JSON.stringify({
-        seedSec: cfg.seedSec, tol: cfg.tol, a4: cfg.a4, string: cfg.string, high2: cfg.high2
+        v: 3, seedSec: cfg.seedSec, tol: cfg.tol, a4: cfg.a4, string: cfg.string, high2: cfg.high2
       }));
     } catch (e) { /* 保存できなくても動く */ }
   }
@@ -1460,19 +1470,19 @@
   }
 
   $('seedIn').addEventListener('input', function () {
-    cfg.seedSec = clamp(parseInt($('seedIn').value, 10) || 15, 3, 60);
+    cfg.seedSec = clamp(parseInt($('seedIn').value, 10) || 5, 3, 60);
     $('seedOut').textContent = String(cfg.seedSec);
     det.setOptions({ bloomSec: cfg.seedSec });
     saveCfg();
   });
   $('waterIn').addEventListener('input', function () {
-    cfg.waterStartSec = clamp(Math.round((parseFloat($('waterIn').value) || 1) * 10) / 10, 0.5, 2);
+    cfg.waterStartSec = clamp(Math.round((parseFloat($('waterIn').value) || 0.5) * 10) / 10, 0.5, 2);
     $('waterOut').textContent = cfg.waterStartSec.toFixed(1);
     det.setOptions({ waterStartSec: cfg.waterStartSec });
     saveCfg();
   });
   $('onDbIn').addEventListener('input', function () {
-    cfg.onDb = clamp(parseInt($('onDbIn').value, 10) || -45, -70, -20);
+    cfg.onDb = clamp(parseInt($('onDbIn').value, 10) || -55, -70, -20);
     $('onDbOut').textContent = String(cfg.onDb);
     $('meterMark').style.left = (clamp((cfg.onDb + 70) / 50, 0, 1) * 100).toFixed(1) + '%';
     det.setOptions({ onDb: cfg.onDb });

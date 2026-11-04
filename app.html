@@ -576,18 +576,18 @@
       <h2>せってい（おとなのひと）</h2>
 
       <div class="row">
-        <div class="lab"><span>開花までの秒数</span><span class="val"><output id="bloomOut">10</output> 秒</span></div>
-        <input type="range" id="bloomIn" min="3" max="60" step="1" value="10">
+        <div class="lab"><span>開花までの秒数</span><span class="val"><output id="bloomOut">5</output> 秒</span></div>
+        <input type="range" id="bloomIn" min="3" max="60" step="1" value="5">
       </div>
 
       <div class="row">
-        <div class="lab"><span>水が出るまでの秒数</span><span class="val"><output id="waterOut">1.0</output> 秒</span></div>
-        <input type="range" id="waterIn" min="0.5" max="2" step="0.1" value="1">
+        <div class="lab"><span>水が出るまでの秒数</span><span class="val"><output id="waterOut">0.5</output> 秒</span></div>
+        <input type="range" id="waterIn" min="0.5" max="2" step="0.1" value="0.5">
       </div>
 
       <div class="row">
-        <div class="lab"><span>音の大きさのしきい値</span><span class="val"><output id="onDbOut">-45</output> dB</span></div>
-        <input type="range" id="onDbIn" min="-70" max="-20" step="1" value="-45">
+        <div class="lab"><span>音の大きさのしきい値</span><span class="val"><output id="onDbOut">-55</output> dB</span></div>
+        <input type="range" id="onDbIn" min="-70" max="-20" step="1" value="-55">
         <div class="meterWrap">
           <div id="meterFill"></div>
           <div id="meterMark"></div>
@@ -989,9 +989,9 @@
   var CELEB_MS = 3000;
   var DIP_SCALE = { 4: 'きびしめ', 6: 'ふつう', 9: 'ゆるめ' };
 
-  // 開花の秒数の初期値は10秒（本人 2026-11-04「デフォ10秒で良いや」）。30秒などは設定で選べる
-  var BLOOM_DEFAULT = 10;
-  var cfg = { bloomSec: BLOOM_DEFAULT, waterStartSec: 1.0, onDb: -45, tremoloDipDb: 6 };
+  // 初期値: 開花5秒・水0.5秒・しきい値-55dB（本人 2026-11-04「しきい値デフォルト低くして、開花まで5秒がデフォルト、0.5秒で水が出るようにしよう」）
+  var BLOOM_DEFAULT = 5, WATER_DEFAULT = 0.5, ONDB_DEFAULT = -55;
+  var cfg = { bloomSec: BLOOM_DEFAULT, waterStartSec: WATER_DEFAULT, onDb: ONDB_DEFAULT, tremoloDipDb: 6 };
 
   function readCfg() {
     try {
@@ -999,13 +999,22 @@
       if (!raw) return;
       var o = JSON.parse(raw);
       if (!o || typeof o !== 'object') return;
-      // 前の版（初期値30秒）が残した30は、選んだ値か初期値のままか見分けられないので、新しい初期値に読み替える。
-      // 今の版が保存した値（bloomV: 2 の印つき）は、30も含めてそのまま使う
-      if (typeof o.bloomSec === 'number' && isFinite(o.bloomSec) && (o.bloomV === 2 || Math.round(o.bloomSec) !== 30)) {
-        cfg.bloomSec = clamp(Math.round(o.bloomSec), 3, 60);
+      // 前の版が残した値のうち、その版の初期値と同じもの（開花10秒・30秒、水1.0秒、しきい値-45）は、
+      // 選んだ値か初期値のままか見分けられないので、今の初期値に読み替える。今の版の値（defV: 3 の印つき）はそのまま使う
+      // （レベル2で弦を選ぶと、水としきい値も保存されるため、多くの端末に前の初期値が残っている）
+      var old = o.defV !== 3;
+      if (typeof o.bloomSec === 'number' && isFinite(o.bloomSec)) {
+        var b = Math.round(o.bloomSec);
+        if (!(old && ((o.bloomV === 2 && b === 10) || (o.bloomV !== 2 && b === 30)))) cfg.bloomSec = clamp(b, 3, 60);
       }
-      if (typeof o.waterStartSec === 'number' && isFinite(o.waterStartSec)) cfg.waterStartSec = clamp(Math.round(o.waterStartSec * 10) / 10, 0.5, 2);
-      if (typeof o.onDb === 'number' && isFinite(o.onDb)) cfg.onDb = clamp(Math.round(o.onDb), -70, -20);
+      if (typeof o.waterStartSec === 'number' && isFinite(o.waterStartSec)) {
+        var w = clamp(Math.round(o.waterStartSec * 10) / 10, 0.5, 2);
+        if (!(old && w === 1)) cfg.waterStartSec = w;
+      }
+      if (typeof o.onDb === 'number' && isFinite(o.onDb)) {
+        var db = clamp(Math.round(o.onDb), -70, -20);
+        if (!(old && db === -45)) cfg.onDb = db;
+      }
       if (typeof o.tremoloDipDb === 'number' && isFinite(o.tremoloDipDb)) cfg.tremoloDipDb = clamp(o.tremoloDipDb, 4, 9);
     } catch (e) { /* 読めなくても初期値で動く */ }
   }
@@ -1014,6 +1023,7 @@
       window.localStorage.setItem(CFG_KEY, JSON.stringify({
         bloomSec: cfg.bloomSec,
         bloomV: 2,
+        defV: 3,
         waterStartSec: cfg.waterStartSec,
         onDb: cfg.onDb,
         tremoloDipDb: cfg.tremoloDipDb
@@ -1386,7 +1396,7 @@
   });
 
   waterIn.addEventListener('input', function () {
-    var v = clamp(Math.round((parseFloat(waterIn.value) || 1) * 10) / 10, 0.5, 2);
+    var v = clamp(Math.round((parseFloat(waterIn.value) || WATER_DEFAULT) * 10) / 10, 0.5, 2);
     cfg.waterStartSec = v;
     waterOut.textContent = v.toFixed(1);
     det.setOptions({ waterStartSec: v });
@@ -1394,7 +1404,7 @@
   });
 
   onDbIn.addEventListener('input', function () {
-    cfg.onDb = clamp(parseInt(onDbIn.value, 10) || -45, -70, -20);
+    cfg.onDb = clamp(parseInt(onDbIn.value, 10) || ONDB_DEFAULT, -70, -20);
     onDbOut.textContent = String(cfg.onDb);
     meterMark.style.left = markPct().toFixed(1) + '%';
     det.setOptions({ onDb: cfg.onDb });
@@ -1458,6 +1468,8 @@
   }
 
   var starting = false;   // マイクの許可を待っている間に、もう一度始めない（2本で聞くと2倍速になる）
+  var everRan = false;    // 一度でも音の処理が動いたか（ボタンの文字を「はじめる」か「つづける」にする）
+  var micFailed = false;  // マイクが使えなかった・切れた後は、画面に触れても聞き直さない（ボタンだけで聞き直す。許可を何度も聞かない）
   function startAudio() {
     if (starting) return;
     if (audio.ctx) {
@@ -1470,11 +1482,11 @@
     hideMicError();
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showMicError('このブラウザではマイクを使えません');
+      micFailed = true; showMicError('このブラウザではマイクを使えません');
       return;
     }
     if (window.isSecureContext === false) {
-      showMicError('安全でない接続のためマイクを使えません');
+      micFailed = true; showMicError('安全でない接続のためマイクを使えません');
       return;
     }
 
@@ -1482,7 +1494,7 @@
 
     // AudioContext はボタンを押したその場で作る（Safari は押した直後でないと音の処理を始めない）
     var AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) { startBtn.disabled = false; showMicError('このブラウザでは音の処理ができません'); return; }
+    if (!AC) { startBtn.disabled = false; micFailed = true; showMicError('このブラウザでは音の処理ができません'); return; }
     var ctx0 = new AC();
     ctx0.resume().catch(function () { /* 後で再開する */ });
     starting = true;
@@ -1514,8 +1526,8 @@
       };
       // タブを裏に回した・画面を消した時は、今の伸ばしを終わりにして「つづける」を出す
       function syncBtn() {
-        if (ctx.state === 'running') { startBtn.textContent = 'きいているよ'; startBtn.disabled = true; }
-        else if (ctx.state !== 'closed') { det.pause(); startBtn.textContent = 'つづける'; startBtn.disabled = false; }
+        if (ctx.state === 'running') { everRan = true; startBtn.textContent = 'きいているよ'; startBtn.disabled = true; }
+        else if (ctx.state !== 'closed') { det.pause(); startBtn.textContent = everRan ? 'つづける' : 'はじめる'; startBtn.disabled = false; }
       }
       ctx.onstatechange = syncBtn;
       // マイクが外れた時は、進み具合を残したまま「はじめる」に戻す
@@ -1526,6 +1538,7 @@
           teardown();
           startBtn.textContent = 'はじめる';
           startBtn.disabled = false;
+          micFailed = true;
           showMicError('マイクが切れました');
         });
       });
@@ -1548,11 +1561,12 @@
       starting = false;
       if (!audio.sp) { teardown(); try { ctx0.close(); } catch (e) { /* 無視 */ } }
       startBtn.disabled = false;
+      micFailed = true;
       showMicError(reasonOf(err));
     });
   }
 
-  startBtn.addEventListener('click', startAudio);
+  startBtn.addEventListener('click', function () { micFailed = false; startAudio(); });
 
   /* ---------- テスト用の口 ---------- */
   var wg = {
@@ -1583,9 +1597,14 @@
   window.addEventListener('load', measureDrops);
   requestAnimationFrame(frame);
 
-  if (/[?&]autostart=1(&|$)/.test(window.location.search)) {
-    setTimeout(startAudio, 60);
-  }
+  // 開いたらすぐ、マイクの許可を聞いて聞き始める（本人 2026-11-04「レベル選択したらマイクの許可聞かれて、始める押さなくても始まって欲しい」）。
+  // ブラウザが「画面に触れるまで音の処理を始めない」時は、ボタンが「はじめる」のまま残り、画面のどこに触れても始まる
+  setTimeout(startAudio, 60);
+  document.addEventListener('pointerdown', function (e) {
+    if (finished || micFailed || settings.classList.contains('open')) return;
+    if (e.target.closest && e.target.closest('button, a, input, #settings')) return;
+    if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
+  });
 })();
 
 </script>
