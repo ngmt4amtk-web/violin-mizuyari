@@ -255,7 +255,8 @@
   #againBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #e0688a; }
   [hidden] { display: none !important; }
   #startBtn:disabled { background: #d7ecdd; color: #3f6b50; box-shadow: 0 5px 0 #b3d3bd; cursor: default; }
-  #gearBtn {
+  #gearBtn, #homeBtn {
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 800;
     width: clamp(38px, 6vmin, 52px); height: clamp(38px, 6vmin, 52px);
     border-radius: 50%; border: 3px solid #2f7d4f; background: #fff;
     font-size: clamp(18px, 2.8vmin, 24px); line-height: 1; cursor: pointer;
@@ -439,6 +440,7 @@
   </main>
 
   <footer>
+    <a id="homeBtn" href="index.html" title="レベルをえらぶ" aria-label="レベルをえらぶ">&#8592;</a>
     <button id="startBtn" type="button">はじめる</button>
     <button id="againBtn" type="button" hidden>もういちど</button>
     <button id="gearBtn" type="button" title="せってい" aria-label="せってい">&#9881;</button>
@@ -532,8 +534,18 @@
     this.blockIndex = 0;
     this.minLag = Math.floor(sampleRate / 3500);
     this.maxLag = Math.ceil(sampleRate / 180);
+    this.classify = null;      // レベル2: 音の高さ → どのタネか（無ければレベル1の数え方）
     this.reset();
   }
+
+  // レベル2で使う。fn(高さHz) が {key: タネの番号 か null, heard: 画面に出す聞こえ方} を返す。
+  // 渡すと、秒数をタネごとに分けて数え、違う音に変わったら伸ばしを1秒からやり直す。
+  Detector.prototype.setClassifier = function (fn) {
+    this.classify = typeof fn === 'function' ? fn : null;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
+  };
 
   Detector.prototype.setOptions = function (o) {
     for (var k in o) {
@@ -562,6 +574,9 @@
     this.vibrato = false;
     this.dipState = 'high';
     this.peak = -120;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
   };
 
   Detector.prototype.reset = function () {
@@ -577,6 +592,7 @@
     this.env = -120;
     this.clarity = 0;
     this.pitch = 0;
+    this.pitchCoarse = 0;
     this.tremolo = false;
     this.dipState = 'high';
     this.peak = -120;
@@ -587,7 +603,15 @@
     this.lowSince = 0;
     this.accrual = [];         // 仮置きの [時刻, 秒数]。トレモロと分かったら取り消し、古くなったら確定する
     this.state = 'idle';       // idle | rising | watering | tremolo
-    this.events = [];          // 'water' | 'bloom' | 'tremolo' を UI へ渡す
+    this.events = [];          // 'water' | 'bloom' | 'tremolo' を UI へ渡す（レベル2は {type, key}）
+    // レベル2（タネごと）
+    this.noteHist = [];        // 直近0.12秒の高さ。真ん中の値でタネを決める
+    this.key = null;           // 今鳴っている音のタネ（どれでもなければ null）
+    this.heard = null;         // 今の音がどう聞こえたか（画面の「いまのは〜」用）
+    this.strokeKey = null;     // 今の伸ばしのタネ
+    this.committedBy = {};     // タネごとの確定した秒数
+    this.totalBy = {};         // タネごとの秒数（仮置きを含む。画面に出す値）
+    this.bloomedBy = {};       // 咲いたタネ
   };
 
   // 波形を受け取る。長さは何でもよい。
@@ -618,16 +642,32 @@
       }
       nsdf[tau] = m > 0 ? 2 * acf / m : 0;
     }
-    // 最初に負へ下がった後の、いちばん高い山
+    // 最初に負へ下がった後の山を集める。はっきりさは、いちばん高い山で決める。
     var t = 1;
     while (t <= maxLag && nsdf[t] > 0) t++;
-    var best = 0, bestLag = 0;
+    var best = 0, bestLag = 0, peaks = [];
     for (; t <= maxLag; t++) {
-      if (t >= this.minLag && nsdf[t] > nsdf[t - 1] && nsdf[t] >= nsdf[t + 1] && nsdf[t] > best) {
-        best = nsdf[t]; bestLag = t;
+      if (t >= this.minLag && nsdf[t] > nsdf[t - 1] && nsdf[t] >= nsdf[t + 1]) {
+        peaks.push(t);
+        if (nsdf[t] > best) { best = nsdf[t]; bestLag = t; }
       }
     }
-    this.pitch = bestLag ? this.sr / bestLag : 0;
+    // ビブラートの見分け（レベル1の数え方）には、前の版と同じ粗い高さを使う。
+    // 細かい高さに替えると、揺れの測り方が変わってトレモロの判定まで変わるため。
+    this.pitchCoarse = bestLag ? this.sr / bestLag : 0;
+    // 音の高さは、いちばん高い山の9割を越える最初の山で決める（McLeod の方法）。
+    // いちばん高い山をそのまま使うと、1オクターブ下に聞き違えることがある。
+    var lag = 0;
+    for (var k = 0; k < peaks.length; k++) { if (nsdf[peaks[k]] >= best * 0.9) { lag = peaks[k]; break; } }
+    if (lag) {
+      // 山の頂を放物線で細かく求める（高い音ほど1サンプルの差が大きいので）
+      var a = nsdf[lag - 1], b = nsdf[lag], c = nsdf[lag + 1], den = a - 2 * b + c;
+      var shift = den !== 0 ? 0.5 * (a - c) / den : 0;
+      if (shift > 0.5) shift = 0.5; else if (shift < -0.5) shift = -0.5;
+      this.pitch = this.sr / (lag + shift);
+    } else {
+      this.pitch = 0;
+    }
     return best;
   };
 
@@ -641,6 +681,7 @@
     if (this.blockIndex % 2 === 0) {
       this.clarity = db > o.onDb - 6 ? this._clarity() : 0;
       this._trackPitch();
+      if (this.classify) this._trackNote(db);
     }
 
     // 鳴っているか（入りと切れに6dBの幅をつけて、ばたつきを抑える）
@@ -662,14 +703,35 @@
 
     // トレモロと分かるまでの遅れ（窓の長さ＋0.2秒）より古い分を確定し、確定分だけで花を咲かせる
     var hold = win + 0.2;
-    while (this.accrual.length && this.accrual[0][0] < now - hold) this.committed += this.accrual.shift()[1];
-    while (this.committed >= o.bloomSec) {
-      this.committed -= o.bloomSec;
-      this.blooms++;
-      this._emit('bloom');
+    while (this.accrual.length && this.accrual[0][0] < now - hold) {
+      var ac = this.accrual.shift();
+      this.committed += ac[1];
+      if (this.classify) this.committedBy[ac[2]] = (this.committedBy[ac[2]] || 0) + ac[1];
+    }
+    if (!this.classify) {
+      while (this.committed >= o.bloomSec) {
+        this.committed -= o.bloomSec;
+        this.blooms++;
+        this._emit('bloom');
+      }
+    } else {
+      // タネごとに、確定した秒数が開花の秒数に届いたら1回だけ咲かせる
+      for (var bk in this.committedBy) {
+        if (!this.bloomedBy[bk] && this.committedBy[bk] >= o.bloomSec) {
+          this.bloomedBy[bk] = true;
+          this.blooms++;
+          this._emit({ type: 'bloom', key: Number(bk) });
+        }
+      }
     }
 
-    var voiced = this.gateOpen && this.clarity >= o.minClarity && !this.tremolo;
+    var voiced = this.gateOpen && this.clarity >= o.minClarity && !this.tremolo &&
+                 (!this.classify || this.key !== null);
+    // レベル2: 違うタネの音に変わったら、伸ばしを1秒からやり直す
+    if (voiced && this.classify) {
+      if (this.stroke > 0 && this.strokeKey !== this.key) this._endStroke();
+      if (this.stroke === 0) this.strokeKey = this.key;
+    }
     if (this.tremolo) {
       this._endStroke();
       this.state = 'tremolo';
@@ -681,7 +743,7 @@
         if (this.stroke >= o.waterStartSec) {
           this.qualified = true;
           this.waters++;
-          this._emit('water');
+          this._emit(this.classify ? { type: 'water', key: this.strokeKey } : 'water');
           // 水が出るまでの1秒も伸ばした時間として数える（10ミリ秒ずつ、もとの時刻で置く）
           var n = Math.round(this.stroke / this.blockSec);
           for (var j = n - 1; j >= 0; j--) this._add(this.blockSec, now - j * this.blockSec);
@@ -701,6 +763,15 @@
     var p = 0;
     for (var i = 0; i < this.accrual.length; i++) p += this.accrual[i][1];
     this.total = this.committed + p;
+    if (this.classify) {
+      var by = {};
+      for (var k in this.committedBy) by[k] = this.committedBy[k];
+      for (var j = 0; j < this.accrual.length; j++) {
+        var e = this.accrual[j];
+        by[e[2]] = (by[e[2]] || 0) + e[1];
+      }
+      this.totalBy = by;
+    }
   };
 
   Detector.prototype._emit = function (e) {
@@ -709,7 +780,7 @@
   };
 
   Detector.prototype._add = function (sec, time) {
-    this.accrual.push([time, sec]);
+    this.accrual.push([time, sec, this.strokeKey]);
   };
 
   Detector.prototype._endStroke = function () {
@@ -744,7 +815,7 @@
     // 直近0.5秒の音の高さ（はっきりした所だけ）の揺れ幅をセントで見る。
     // 20セント以上揺れていればビブラート。トレモロは同じ高さのままなので揺れない。
     var ph = this.pitchHist;
-    if (this.clarity >= 0.8 && this.pitch > 0) ph.push([this.now, 1200 * Math.log2(this.pitch / 440)]);
+    if (this.clarity >= 0.8 && this.pitchCoarse > 0) ph.push([this.now, 1200 * Math.log2(this.pitchCoarse / 440)]);
     while (ph.length && ph[0][0] < this.now - 0.5) ph.shift();
     if (ph.length < 10) { this.vibrato = false; return; }
     var c = ph.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; });
@@ -760,7 +831,20 @@
     var from = this.dipTimes[0] - 0.2;
     this.accrual = this.accrual.filter(function (e) { return e[0] < from; });
     this._sumTotal();
-    this._emit('tremolo');
+    this._emit(this.classify ? { type: 'tremolo', key: null } : 'tremolo');
+  };
+
+  Detector.prototype._trackNote = function (db) {
+    // 直近0.12秒の、はっきりした高さの真ん中の値でタネを決める。
+    // 弾き始めのゆれや、1コマだけの聞き違いで別のタネへ飛ばないようにする。
+    var nh = this.noteHist;
+    if (db > this.opt.onDb - 6 && this.clarity >= this.opt.minClarity && this.pitch > 0) nh.push([this.now, this.pitch]);
+    while (nh.length && nh[0][0] < this.now - 0.12) nh.shift();
+    if (nh.length < 3) { this.key = null; this.heard = null; return; }
+    var f = nh.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; })[nh.length >> 1];
+    var r = this.classify(f);
+    this.key = (r && r.key !== null && r.key !== undefined) ? r.key : null;
+    this.heard = r ? (r.heard || null) : null;
   };
 
   Detector.prototype.takeEvents = function () {
@@ -978,6 +1062,9 @@
       else if (evs[i] === 'bloom') finish(t);
     }
 
+    // 咲いたかは判定器の回数からも拾う（画面が止まっていて知らせが溢れた時の取りこぼし対策）
+    if (!finished && d.blooms > 0) finish(t);
+
     if (canVisible && (d.state === 'tremolo' || (d.state !== 'watering' && t >= canShownAt + CAN_MIN_MS))) hideCan();
 
     var pour = canVisible && d.state !== 'tremolo' && t >= pourAt;
@@ -1104,7 +1191,7 @@
 
   function showMicError(reason) {
     $('micErrTitle').textContent = 'マイクが使えません: ' + reason;
-    $('micErrSub').textContent = 'iPhone のファイルアプリからは動きません。Mac の Chrome で http://localhost から開いてください。';
+    $('micErrSub').textContent = 'https://ngmt4amtk-web.github.io/violin-mizuyari/ から開くと、マイクを使えます。';
     $('micErr').classList.add('show');
   }
   function hideMicError() {
@@ -1122,7 +1209,9 @@
     audio.mute = null;
   }
 
+  var starting = false;   // マイクの許可を待っている間に、もう一度始めない（2本で聞くと2倍速になる）
   function startAudio() {
+    if (starting) return;
     if (audio.ctx) {
       // 止まっていた音の処理を、ボタンを押したその場で再開する
       if (audio.ctx.state !== 'running') {
@@ -1148,10 +1237,12 @@
     if (!AC) { startBtn.disabled = false; showMicError('このブラウザでは音の処理ができません'); return; }
     var ctx0 = new AC();
     ctx0.resume().catch(function () { /* 後で再開する */ });
+    starting = true;
 
     navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     }).then(function (stream) {
+      starting = false;
       audio.stream = stream;
       audio.ctx = ctx0;
       var ctx = ctx0;
@@ -1206,6 +1297,7 @@
       lastWaters = -1;
       measureDrops();
     }).catch(function (err) {
+      starting = false;
       if (!audio.sp) { teardown(); try { ctx0.close(); } catch (e) { /* 無視 */ } }
       startBtn.disabled = false;
       showMicError(reasonOf(err));

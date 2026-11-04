@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ゆびのタネ</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    color: #14361f; overflow: hidden; background: #bfe9ff;
+  }
+  [hidden] { display: none !important; }
+
+  /* ---------- 画面全体 ---------- */
+  #app {
+    position: relative;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(#8ed8ff 0%, #b9e8ff 42%, #dff4ff 58%, #c6e9a8 58%, #a9dc86 100%);
+    --c: #CC1030;   /* 選んだ弦の色（JS で入れ替える） */
+  }
+  #bgbox { position: absolute; inset: 0; z-index: 0; }
+  #bgbox > .bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+  #bgbox.img-ok > .bgimg { opacity: 1; }
+
+  /* ---------- 上の表示 ---------- */
+  header {
+    position: relative; z-index: 5; flex: 0 0 auto;
+    padding: clamp(6px, 1.2vmin, 16px) clamp(10px, 2.4vmin, 28px) 0;
+    text-align: center;
+  }
+  #bloomLine {
+    font-size: clamp(22px, 5.6vmin, 46px);
+    font-weight: 800; line-height: 1.12; letter-spacing: .02em;
+    color: #0c4b2c;
+    text-shadow: 0 2px 0 #ffffff, 0 3px 10px rgba(255,255,255,.75);
+  }
+  #bloomLine .str { color: var(--c); }
+  #subLine {
+    margin-top: clamp(4px, 1vmin, 10px);
+    font-size: clamp(13px, 2.3vmin, 21px); font-weight: 700; color: #14502f;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- まんなかの舞台 ---------- */
+  #scene { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+  :root {
+    --soilW: min(94vw, 1000px);
+    --soilH: min(13vmin, 120px);
+    --moundH: calc(var(--soilH) * 1.15);
+    --cellW: calc(var(--soilW) / 5);
+    --plantH: min(calc(var(--cellW) * 1.45), 34vh, 300px);
+    --canW: min(17vmin, 150px);
+    --canH: calc(var(--canW) * 0.95);
+    --moundBottom: 6%;
+    --dropW: min(1.4vmin, 10px);
+  }
+  @media (orientation: portrait) { :root { --moundBottom: 18%; --plantH: min(calc(var(--cellW) * 1.8), 34vh, 300px); } }
+
+  #mound {
+    position: absolute; left: 50%; bottom: var(--moundBottom);
+    width: var(--soilW); height: var(--moundH);
+    transform: translateX(-50%);
+    border-radius: 50% 50% 46% 46% / 72% 72% 28% 28%;
+    overflow: hidden; z-index: 1;
+    box-shadow: 0 10px 22px rgba(60,40,20,.16);
+  }
+  #mound > .asset { object-fit: cover; }
+  #soilFallback { position: absolute; inset: 0; background: linear-gradient(#a56e46 0%, #90603a 34%, #7d4f2c 78%); }
+  #mound::after {
+    content: ""; position: absolute; left: 4%; right: 4%; top: -6%; height: 46%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 55%, rgba(214,160,116,.55), rgba(214,160,116,0) 72%);
+    pointer-events: none;
+  }
+
+  .swap { position: relative; }
+  .swap > .asset {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; object-position: 50% 100%;
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .swap > .fallback { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 1; transition: opacity .2s; }
+  .swap.img-ok > .asset { opacity: 1; }
+  .swap.img-ok > .fallback { opacity: 0; }
+
+  /* 5つのはたけ（0〜4のタネ） */
+  #garden {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--moundBottom) + var(--moundH) * 0.18);
+    width: var(--soilW);
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    z-index: 3; pointer-events: none;
+  }
+  .plot { position: relative; height: calc(var(--plantH) + var(--moundH) * 0.82); }
+  .plot .lip {
+    position: absolute; left: 50%; bottom: calc(var(--moundH) * 0.82 - 10px);
+    width: 62%; height: calc(var(--cellW) * 0.16);
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 26%, #bb8459 0%, #a06a41 46%, #8a5633 100%);
+    box-shadow: 0 2px 6px rgba(70,45,25,.18);
+    z-index: 2;
+  }
+  .plot .pplant {
+    position: absolute; left: 50%; bottom: calc(var(--moundH) * 0.82 - 10px + var(--cellW) * 0.09);
+    width: var(--plantH); height: var(--plantH);
+    transform: translateX(-50%); z-index: 1;
+  }
+  .pplant > .stage {
+    position: absolute; left: 50%; bottom: 0;
+    height: calc(var(--plantH) * var(--f));
+    width: calc(var(--plantH) * var(--f) * var(--ar));
+    transform: translateX(-50%);
+    opacity: 0; transition: opacity .3s ease; transform-origin: 50% 100%;
+  }
+  .pplant > .stage.show { opacity: 1; }
+  /* タネは小さいので、土のこぶの上にのせて見せる（レベル1より上げる） */
+  .pplant > .stage[data-stage="seed"] { bottom: calc(var(--plantH) * var(--f) * -0.05); }
+  .plot.pop .stage[data-stage="flower"] { animation: flowerPop .95s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes flowerPop {
+    0% { transform: translateX(-50%) scale(1) rotate(0deg); }
+    35% { transform: translateX(-50%) scale(1.18) rotate(-3deg); }
+    68% { transform: translateX(-50%) scale(1.08) rotate(3deg); }
+    100% { transform: translateX(-50%) scale(1) rotate(0deg); }
+  }
+  /* 番号の札（弦の色）。まわりの輪が育ちぐあい（0〜100%）で埋まる */
+  .plot .tag {
+    position: absolute; left: 50%; bottom: calc(var(--moundH) * -0.12);
+    transform: translateX(-50%);
+    width: clamp(34px, calc(var(--cellW) * 0.34), 64px); height: clamp(34px, calc(var(--cellW) * 0.34), 64px);
+    border-radius: 50%; padding: clamp(3px, .6vmin, 5px);
+    background: conic-gradient(var(--c) calc(var(--p, 0) * 1%), rgba(255,255,255,.75) 0);
+    box-shadow: 0 3px 0 rgba(0,0,0,.14);
+    z-index: 3; transition: transform .15s ease;
+  }
+  .plot .tag > b {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%; border-radius: 50%;
+    background: #fff; color: var(--c);
+    font-size: clamp(17px, calc(var(--cellW) * 0.2), 34px); font-weight: 900; line-height: 1;
+    transition: background .15s ease, color .15s ease;
+  }
+  .plot.hear .tag { transform: translateX(-50%) scale(1.14); }
+  .plot.hear .tag > b { background: var(--c); color: #fff; }
+  .plot.done .tag > b { background: #fff6c8; }
+
+  /* ---------- ジョウロ ---------- */
+  #canWrap {
+    position: absolute; left: 50%;
+    bottom: calc(var(--moundBottom) + var(--moundH) + var(--plantH) * 0.55);
+    width: var(--canW); height: var(--canH);
+    z-index: 4; opacity: 0;
+    transform: translateY(-14%) scale(.94);
+    transition: opacity .32s ease, transform .42s cubic-bezier(.3,1.2,.6,1), left .35s ease;
+    pointer-events: none;
+  }
+  #canWrap.on { opacity: 1; transform: translateY(0) scale(1); }
+  #canBox { width: 100%; height: 100%; transform-origin: 60% 25%; transform: rotate(0deg); transition: transform .45s cubic-bezier(.3,1.1,.5,1); }
+  #canWrap.on #canBox { transform: rotate(24deg); }
+
+  #drops { position: absolute; left: 75.8%; top: 78.7%; width: 0; height: 0; z-index: 5; pointer-events: none; --fall: 120px; --fallh: 48px; --dx: -60px; --dxh: -33px; }
+  #drops .probe { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  #drops .drop {
+    position: absolute; left: 0; top: 0;
+    width: var(--dropW); height: calc(var(--dropW) * 1.55);
+    border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+    background: linear-gradient(#b3e7ff, #4fb4ee);
+    opacity: 0;
+  }
+  #drops.img-ok .drop { background: url(images/drop.png) center / contain no-repeat; border-radius: 0; }
+  #drops.on .drop { animation: dropFall .82s linear infinite; }
+  @keyframes dropFall {
+    0% { transform: translate(-50%, -6px) scaleY(.75); opacity: 0; }
+    12% { opacity: 1; }
+    55% { transform: translate(calc(-50% + var(--dxh)), var(--fallh)) scaleY(1); opacity: 1; }
+    86% { opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx)), var(--fall)) scaleY(1.15); opacity: 0; }
+  }
+
+  /* ---------- キラキラ（ぜんぶ咲いた時） ---------- */
+  #sparkles { position: absolute; left: 50%; top: 34%; width: 0; height: 0; z-index: 6; pointer-events: none; }
+  #sparkles .ring {
+    position: absolute; left: 50%; top: 50%;
+    width: min(46vmin, 380px); height: min(46vmin, 380px);
+    margin-left: max(-23vmin, -190px); margin-top: max(-23vmin, -190px);
+    border-radius: 50%; border: 5px solid #ffe27a; opacity: 0;
+  }
+  #sparkles.go .ring { animation: ringOut 1.1s ease-out 3 both; }
+  #sparkles.go .ring:nth-child(2) { animation-delay: .18s; border-color: #ffd0e2; }
+  #sparkles.go .ring:nth-child(3) { animation-delay: .36s; border-color: #bff0a8; }
+  @keyframes ringOut { 0% { transform: scale(.35); opacity: .95; } 100% { transform: scale(2.6); opacity: 0; } }
+
+  #hint {
+    position: absolute; left: 50%; top: 5%;
+    transform: translate(-50%, -6px);
+    padding: .35em .95em; border-radius: 999px;
+    background: rgba(255,255,255,.94); color: #2b6b4a;
+    font-size: clamp(14px, 2.6vmin, 24px); font-weight: 800;
+    box-shadow: 0 3px 10px rgba(20,60,40,.12);
+    opacity: 0; transition: opacity .25s ease, transform .25s ease;
+    pointer-events: none; z-index: 7; white-space: nowrap;
+  }
+  #hint.show { opacity: 1; transform: translate(-50%, 0); }
+  #hint .s { font-weight: 900; }
+
+  /* ---------- 弦をえらぶ ---------- */
+  #pick {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(12px, 3vmin, 28px);
+    padding: 16px; background: rgba(223,244,255,.86);
+  }
+  #pick h2 { margin: 0; font-size: clamp(22px, 5vmin, 44px); font-weight: 900; color: #0c4b2c; text-align: center; }
+  #pickRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(8px, 2vmin, 20px); width: min(860px, 100%); }
+  @media (max-width: 520px) { #pickRow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  #pickRow button {
+    font-family: inherit; cursor: pointer;
+    border: none; border-radius: 22px; padding: clamp(14px, 3vmin, 30px) 6px;
+    background: var(--sc); color: #fff;
+    box-shadow: 0 6px 0 rgba(0,0,0,.22), 0 10px 18px rgba(0,0,0,.12);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  #pickRow button:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.22); }
+  #pickRow .big { font-size: clamp(24px, 5.4vmin, 50px); font-weight: 900; line-height: 1.05; }
+  #pickRow .sm { font-size: clamp(13px, 2.2vmin, 20px); font-weight: 700; opacity: .92; }
+  #pick .back { font-size: clamp(14px, 2.2vmin, 18px); color: #24503a; font-weight: 700; }
+
+  /* ---------- 下のボタン ---------- */
+  footer {
+    position: relative; z-index: 5; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    gap: clamp(8px, 1.8vmin, 20px);
+    padding: clamp(6px, 1.4vmin, 14px) 12px calc(clamp(8px, 1.8vmin, 18px) + env(safe-area-inset-bottom));
+  }
+  .pill {
+    font-family: inherit; font-weight: 800; border: none; border-radius: 999px; cursor: pointer;
+    font-size: clamp(18px, 3.2vmin, 28px); padding: .5em 1.5em;
+  }
+  #startBtn { background: #ffd75e; color: #5a3a00; box-shadow: 0 5px 0 #e0a800, 0 8px 16px rgba(90,58,0,.18); }
+  #startBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #e0a800; }
+  #startBtn:disabled { background: #d7ecdd; color: #3f6b50; box-shadow: 0 5px 0 #b3d3bd; cursor: default; }
+  #againBtn { background: #ff9db5; color: #6a1430; box-shadow: 0 5px 0 #e0688a, 0 8px 16px rgba(106,20,48,.18); font-size: clamp(20px, 3.6vmin, 32px); }
+  #againBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #e0688a; }
+  #pickBtn { background: #fff; color: var(--c); border: 3px solid var(--c); font-size: clamp(15px, 2.4vmin, 21px); padding: .45em 1.1em; }
+  .round {
+    width: clamp(38px, 6vmin, 52px); height: clamp(38px, 6vmin, 52px);
+    border-radius: 50%; border: 3px solid #2f7d4f; background: #fff;
+    font-size: clamp(18px, 2.8vmin, 24px); line-height: 1; cursor: pointer;
+    color: #2f7d4f; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+    text-decoration: none; font-family: inherit; font-weight: 800;
+  }
+
+  /* ---------- せってい ---------- */
+  #settings {
+    position: fixed; inset: 0; z-index: 30;
+    display: none; align-items: center; justify-content: center;
+    padding: 14px; background: rgba(8,30,20,.42);
+  }
+  #settings.open { display: flex; }
+  #settingsBox {
+    width: min(560px, 100%); max-height: 90dvh; overflow-y: auto; overflow-x: hidden;
+    background: #fff; border-radius: 18px; padding: 18px 18px 22px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    font-size: clamp(13px, 1.7vmin, 16px); color: #173a28;
+  }
+  #settingsBox h2 { margin: 0 0 14px; font-size: 1.25em; color: #17603c; }
+  .row { margin: 0 0 16px; }
+  .row > .lab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 700; margin-bottom: 6px; }
+  .row .val { color: #b4501d; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; height: 30px; accent-color: #2f9e5f; }
+  .meterWrap { position: relative; height: 18px; background: #eef2f0; border-radius: 9px; overflow: hidden; border: 1px solid #cfe0d5; }
+  #meterFill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg,#bfe6ff,#4fb4ee); }
+  #meterMark { position: absolute; top: -3px; bottom: -3px; width: 3px; background: #e0402a; left: 50%; }
+  .meterScale { display: flex; justify-content: space-between; font-size: .78em; color: #6b8a79; margin-top: 3px; }
+  .note { font-size: .85em; color: #4d6b5a; margin-top: 6px; line-height: 1.5; }
+  .seg { display: flex; gap: 8px; }
+  .seg button {
+    flex: 1 1 0; font-family: inherit; font-size: 1em; padding: .55em 0;
+    border: 2px solid #b9d5c5; background: #f5faf7; color: #24503a;
+    border-radius: 10px; cursor: pointer; min-width: 0;
+  }
+  .seg button.on { background: #2f9e5f; border-color: #2f9e5f; color: #fff; font-weight: 700; }
+  .two { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
+  .two .sn { font-weight: 800; }
+  .btns { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .btns button {
+    font-family: inherit; font-size: 1em; padding: .65em 1.1em; border-radius: 10px;
+    border: 2px solid #2f9e5f; background: #2f9e5f; color: #fff; cursor: pointer; font-weight: 700; flex: 1 1 auto;
+  }
+
+  #micErr {
+    position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(560px, calc(100% - 24px));
+    background: #fff6f2; border: 2px solid #e6a08a; border-radius: 14px;
+    padding: 12px 14px; z-index: 40;
+    font-size: clamp(12px, 1.6vmin, 15px); line-height: 1.55; color: #7a2a12;
+    box-shadow: 0 10px 28px rgba(0,0,0,.18);
+    display: none;
+  }
+  #micErr.show { display: block; }
+  #micErr .t { font-weight: 800; margin-bottom: 4px; }
+  #micErr .s { color: #8a4530; }
+  @media (prefers-reduced-motion: reduce) {
+    #canWrap, #canBox, .tag { transition: none; }
+    #drops.on .drop, #sparkles.go .ring, .plot.pop .stage { animation-duration: .01s; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bgbox"><img class="bgimg" alt="" src="images/bg.png"></div>
+
+  <header>
+    <div id="bloomLine"><span class="str" id="strName">ラせん</span>の タネを さかせよう</div>
+    <div id="subLine">さいた <span id="doneN">0</span> / 5 ・ みずやり <span id="waterN">0</span> かい</div>
+  </header>
+
+  <main id="scene">
+    <div id="mound" class="swap">
+      <img class="asset" alt="" src="images/soil.png">
+      <div id="soilFallback" class="fallback"></div>
+    </div>
+
+    <div id="garden"></div>
+
+    <div id="sparkles" aria-hidden="true"><span class="ring"></span><span class="ring"></span><span class="ring"></span></div>
+
+    <div id="canWrap" aria-hidden="true">
+      <div id="canBox" class="swap">
+        <img class="asset" alt="" src="images/can.png">
+        <svg class="fallback" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M28 28 C 32 12 58 12 62 28" fill="none" stroke="#2f7fc4" stroke-width="7" stroke-linecap="round"></path>
+          <path d="M66 48 L95 64 L95 70 L66 78 Z" fill="#4aa3e0"></path>
+          <rect x="14" y="26" width="54" height="54" rx="12" fill="#5cb3ea"></rect>
+          <rect x="14" y="26" width="54" height="14" rx="7" fill="#7cc6f2"></rect>
+          <ellipse cx="95" cy="67" rx="4" ry="7" fill="#3f93cf"></ellipse>
+          <ellipse cx="41" cy="58" rx="11" ry="9" fill="#9ed8f7" opacity=".55"></ellipse>
+        </svg>
+      </div>
+      <div id="drops" aria-hidden="true">
+        <img class="probe" alt="" src="images/drop.png">
+        <i class="drop" style="animation-delay:-0.00s"></i>
+        <i class="drop" style="animation-delay:-0.10s"></i>
+        <i class="drop" style="animation-delay:-0.20s"></i>
+        <i class="drop" style="animation-delay:-0.30s"></i>
+        <i class="drop" style="animation-delay:-0.40s"></i>
+        <i class="drop" style="animation-delay:-0.50s"></i>
+        <i class="drop" style="animation-delay:-0.60s"></i>
+        <i class="drop" style="animation-delay:-0.70s"></i>
+      </div>
+    </div>
+
+    <div id="hint"></div>
+
+    <div id="pick">
+      <h2>どの げんで あそぶ？</h2>
+      <div id="pickRow">
+        <button type="button" data-str="G" style="--sc:#1F5FD1"><span class="big">ソせん</span><span class="sm">G</span></button>
+        <button type="button" data-str="D" style="--sc:#EE8A00"><span class="big">レせん</span><span class="sm">D</span></button>
+        <button type="button" data-str="A" style="--sc:#CC1030"><span class="big">ラせん</span><span class="sm">A</span></button>
+        <button type="button" data-str="E" style="--sc:#138A3A"><span class="big">ミせん</span><span class="sm">E</span></button>
+      </div>
+      <a class="back" href="index.html">← レベルを えらびなおす</a>
+    </div>
+  </main>
+
+  <footer>
+    <a class="round" href="index.html" title="レベルをえらぶ" aria-label="レベルをえらぶ">&#8592;</a>
+    <button id="startBtn" class="pill" type="button">はじめる</button>
+    <button id="againBtn" class="pill" type="button" hidden>もういちど</button>
+    <button id="pickBtn" class="pill" type="button">げんを かえる</button>
+    <button id="gearBtn" class="round" type="button" title="せってい" aria-label="せってい">&#9881;</button>
+  </footer>
+
+  <div id="micErr">
+    <div class="t" id="micErrTitle">マイクが使えません</div>
+    <div class="s" id="micErrSub"></div>
+  </div>
+
+  <div id="settings" role="dialog" aria-modal="true" aria-label="せってい">
+    <div id="settingsBox">
+      <h2>せってい（おとなのひと）</h2>
+
+      <div class="row">
+        <div class="lab"><span>タネ1つが咲くまでの秒数</span><span class="val"><output id="seedOut">15</output> 秒</span></div>
+        <input type="range" id="seedIn" min="5" max="60" step="1" value="15">
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>2の指</span></div>
+        <div class="two" id="twoGroup"></div>
+        <div class="note">高い2は開放弦から長3度上（ラ線ならド♯）、低い2は短3度上（ラ線ならド）。</div>
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>音の高さの見分け</span><span class="val" id="tolOut">ゆるめ</span></div>
+        <div class="seg" id="tolGroup">
+          <button type="button" data-tol="40">きびしめ</button>
+          <button type="button" data-tol="60">ふつう</button>
+          <button type="button" data-tol="90">ゆるめ</button>
+        </div>
+        <div class="note">いちばん近い指の音から、ゆるめは90セント、ふつうは60セント、きびしめは40セントまでを、その指の音とみなします。</div>
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>基準のラ</span><span class="val"><span id="a4Out">442</span> Hz</span></div>
+        <div class="seg" id="a4Group">
+          <button type="button" data-a4="440">440</button>
+          <button type="button" data-a4="441">441</button>
+          <button type="button" data-a4="442">442</button>
+          <button type="button" data-a4="443">443</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>水が出るまでの秒数</span><span class="val"><output id="waterOut">1.0</output> 秒</span></div>
+        <input type="range" id="waterIn" min="0.5" max="2" step="0.1" value="1">
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>音の大きさのしきい値</span><span class="val"><output id="onDbOut">-45</output> dB</span></div>
+        <input type="range" id="onDbIn" min="-70" max="-20" step="1" value="-45">
+        <div class="meterWrap"><div id="meterFill"></div><div id="meterMark"></div></div>
+        <div class="meterScale"><span>-70 dB</span><span>-45</span><span>-20 dB</span></div>
+        <div class="note">メーターが線を越えると音として数えます。レベル1と同じ値を使います。</div>
+      </div>
+
+      <div class="row">
+        <div class="lab"><span>トレモロの見分け</span><span class="val" id="segOut">ふつう</span></div>
+        <div class="seg" id="segGroup">
+          <button type="button" data-dip="4">きびしめ</button>
+          <button type="button" data-dip="6">ふつう</button>
+          <button type="button" data-dip="9">ゆるめ</button>
+        </div>
+      </div>
+
+      <div class="btns"><button type="button" id="closeSettings">とじる</button></div>
+    </div>
+  </div>
+</div>
+
+<template id="plantTpl">
+  <div class="stage swap" data-stage="seed" style="--f:.19; --ar:3.33">
+    <img class="asset" alt="" src="images/seed.png">
+    <svg class="fallback" viewBox="0 0 100 30" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <ellipse cx="50" cy="28" rx="21" ry="5.5" fill="#5b3a20" opacity=".62"></ellipse>
+      <g transform="rotate(-14 50 20)">
+        <ellipse cx="50" cy="20" rx="11" ry="8.5" fill="#3f2a1b"></ellipse>
+        <ellipse cx="46.5" cy="17" rx="3.6" ry="2.6" fill="#7a5537" opacity=".9"></ellipse>
+      </g>
+    </svg>
+  </div>
+  <div class="stage swap" data-stage="sprout" style="--f:.34; --ar:1.61">
+    <img class="asset" alt="" src="images/sprout.png">
+    <svg class="fallback" viewBox="0 0 100 62" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <path d="M50 60 C 48 44 52 34 50 20" stroke="#4caf50" stroke-width="6" fill="none" stroke-linecap="round"></path>
+      <ellipse cx="37" cy="31" rx="12" ry="6.5" fill="#66bb6a" transform="rotate(-28 37 31)"></ellipse>
+      <ellipse cx="63" cy="27" rx="12" ry="6.5" fill="#4caf50" transform="rotate(28 63 27)"></ellipse>
+    </svg>
+  </div>
+  <div class="stage swap" data-stage="stem" style="--f:.64; --ar:1">
+    <img class="asset" alt="" src="images/stem.png">
+    <svg class="fallback" viewBox="0 0 100 100" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <path d="M50 98 C 46 72 54 52 50 26" stroke="#4caf50" stroke-width="7" fill="none" stroke-linecap="round"></path>
+      <ellipse cx="33" cy="78" rx="13" ry="7" fill="#66bb6a" transform="rotate(-30 33 78)"></ellipse>
+      <ellipse cx="67" cy="66" rx="13" ry="7" fill="#4caf50" transform="rotate(30 67 66)"></ellipse>
+      <ellipse cx="34" cy="52" rx="12" ry="6.5" fill="#4caf50" transform="rotate(-34 34 52)"></ellipse>
+      <ellipse cx="66" cy="40" rx="12" ry="6.5" fill="#66bb6a" transform="rotate(34 66 40)"></ellipse>
+    </svg>
+  </div>
+  <div class="stage swap" data-stage="bud" style="--f:.74; --ar:.847">
+    <img class="asset" alt="" src="images/bud.png">
+    <svg class="fallback" viewBox="0 0 100 118" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <path d="M50 116 C 46 90 54 70 50 40" stroke="#4caf50" stroke-width="7" fill="none" stroke-linecap="round"></path>
+      <ellipse cx="33" cy="96" rx="13" ry="7" fill="#66bb6a" transform="rotate(-30 33 96)"></ellipse>
+      <ellipse cx="67" cy="84" rx="13" ry="7" fill="#4caf50" transform="rotate(30 67 84)"></ellipse>
+      <ellipse cx="34" cy="70" rx="12" ry="6.5" fill="#4caf50" transform="rotate(-34 34 70)"></ellipse>
+      <ellipse cx="66" cy="58" rx="12" ry="6.5" fill="#66bb6a" transform="rotate(34 66 58)"></ellipse>
+      <path d="M50 40 C 44 34 44 26 50 24 C 56 26 56 34 50 40 Z" fill="#5cb860"></path>
+      <ellipse cx="50" cy="21" rx="9.5" ry="13" fill="#f48fb1"></ellipse>
+      <ellipse cx="46.5" cy="16" rx="3.6" ry="5.4" fill="#f8a5c2" opacity=".85"></ellipse>
+    </svg>
+  </div>
+  <div class="stage swap" data-stage="flower" style="--f:1; --ar:.625">
+    <img class="asset" alt="" src="images/flower.png">
+    <svg class="fallback" viewBox="0 0 100 160" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <path d="M50 158 C 46 122 54 96 50 60" stroke="#4caf50" stroke-width="7" fill="none" stroke-linecap="round"></path>
+      <ellipse cx="33" cy="126" rx="13" ry="7" fill="#66bb6a" transform="rotate(-30 33 126)"></ellipse>
+      <ellipse cx="67" cy="112" rx="13" ry="7" fill="#4caf50" transform="rotate(30 67 112)"></ellipse>
+      <ellipse cx="34" cy="96" rx="12" ry="6.5" fill="#4caf50" transform="rotate(-34 34 96)"></ellipse>
+      <ellipse cx="66" cy="84" rx="12" ry="6.5" fill="#66bb6a" transform="rotate(34 66 84)"></ellipse>
+      <g fill="#ff8fb3">
+        <ellipse cx="50" cy="36" rx="8.5" ry="12"></ellipse>
+        <ellipse cx="50" cy="36" rx="8.5" ry="12" transform="rotate(72 50 48)"></ellipse>
+        <ellipse cx="50" cy="36" rx="8.5" ry="12" transform="rotate(144 50 48)"></ellipse>
+        <ellipse cx="50" cy="36" rx="8.5" ry="12" transform="rotate(216 50 48)"></ellipse>
+        <ellipse cx="50" cy="36" rx="8.5" ry="12" transform="rotate(288 50 48)"></ellipse>
+      </g>
+      <circle cx="50" cy="48" r="7.5" fill="#ffd93b"></circle>
+    </svg>
+  </div>
+</template>
+
+<script>
+// 伸ばし音の判定（水やりゲームの核）。app.html にも同じ中身を埋め込む。
+// マイクの生の波形を少しずつ受け取り、10ミリ秒ごとに「伸ばしている音か」を決める。
+// 録音はしない。直近1秒ぶんの数値だけを手元に置き、古いものは捨てる。
+(function (root) {
+  'use strict';
+
+  var DEFAULTS = {
+    waterStartSec: 1.0,   // この秒数だけ伸びたら水が出る（本人の言葉: 1秒）
+    bloomSec: 30,         // 合計でこの秒数伸ばしたら花が咲く（本人の言葉: 30秒）
+    onDb: -45,            // これより大きい音を「鳴っている」とみなす（dBFS）
+    tremoloDipDb: 6,      // 音量がこれだけ落ちて戻ったら「弓の返し」1回とみなす
+    tremoloDips: 2,       // 0.7秒の中に返しがこの回数以上あればトレモロ
+    tremoloWindowSec: 0.7,
+    gapHoldSec: 0.15,     // 弓を返す一瞬の途切れはここまで許す
+    minClarity: 0.6       // 音の高さがはっきりしている度合い（0〜1）。雑音や息を外す
+  };
+
+  var RANGES = {
+    waterStartSec: [0.1, 10], bloomSec: [1, 3600], onDb: [-100, 0],
+    tremoloDipDb: [1, 40], tremoloDips: [1, 20], tremoloWindowSec: [0.2, 2],
+    gapHoldSec: [0, 1], minClarity: [0, 1]
+  };
+
+  function toDb(meanSq) { return meanSq > 1e-18 ? 10 * Math.log10(meanSq) : -120; }
+
+  function Detector(sampleRate, opts) {
+    this.sr = sampleRate;
+    this.opt = {};
+    for (var k in DEFAULTS) this.opt[k] = DEFAULTS[k];
+    if (opts) this.setOptions(opts);
+    this.blockLen = Math.round(sampleRate * 0.01);
+    this.blockSec = this.blockLen / sampleRate;
+    this.anaLen = 1024 * Math.max(1, Math.round(sampleRate / 48000));
+    if (this.anaLen < 1024) this.anaLen = 1024;
+    this.ring = new Float32Array(this.anaLen);
+    this.ringPos = 0;
+    this.blockBuf = new Float32Array(this.blockLen);
+    this.blockFill = 0;
+    this.blockIndex = 0;
+    this.minLag = Math.floor(sampleRate / 3500);
+    this.maxLag = Math.ceil(sampleRate / 180);
+    this.classify = null;      // レベル2: 音の高さ → どのタネか（無ければレベル1の数え方）
+    this.reset();
+  }
+
+  // レベル2で使う。fn(高さHz) が {key: タネの番号 か null, heard: 画面に出す聞こえ方} を返す。
+  // 渡すと、秒数をタネごとに分けて数え、違う音に変わったら伸ばしを1秒からやり直す。
+  Detector.prototype.setClassifier = function (fn) {
+    this.classify = typeof fn === 'function' ? fn : null;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
+  };
+
+  Detector.prototype.setOptions = function (o) {
+    for (var k in o) {
+      var v = Number(o[k]);
+      if (k in DEFAULTS && isFinite(v)) this.opt[k] = v;
+    }
+    // 0や負の数などで止まったり壊れたりしないよう、値を範囲に収める
+    var R = RANGES;
+    for (var key in R) {
+      var x = this.opt[key];
+      if (x < R[key][0]) x = R[key][0];
+      if (x > R[key][1]) x = R[key][1];
+      this.opt[key] = x;
+    }
+    this.opt.tremoloDips = Math.round(this.opt.tremoloDips);
+  };
+
+  // 途中で音の処理が止まった時に呼ぶ。今の伸ばしは終わりにし、貯まった秒数と回数は残す。
+  Detector.prototype.pause = function () {
+    this._endStroke();
+    this.state = 'idle';
+    this.gateOpen = false;
+    this.tremolo = false;
+    this.dipTimes = [];
+    this.pitchHist = [];
+    this.vibrato = false;
+    this.dipState = 'high';
+    this.peak = -120;
+    this.noteHist = [];
+    this.key = null;
+    this.heard = null;
+  };
+
+  Detector.prototype.reset = function () {
+    this.now = 0;
+    this.total = 0;            // 今の花に向けて貯まった秒数（確定分＋仮置き分。画面に出す値）
+    this.committed = 0;        // 確定した秒数。花はこれで咲かせる
+    this.blooms = 0;           // 咲かせた回数
+    this.waters = 0;           // 水が出た回数
+    this.stroke = 0;           // 今の伸ばしの秒数（鳴っている時間だけ数える）
+    this.qualified = false;    // 今の伸ばしが水の秒数を越えたか
+    this.gap = 0;
+    this.gateOpen = false;
+    this.env = -120;
+    this.clarity = 0;
+    this.pitch = 0;
+    this.pitchCoarse = 0;
+    this.tremolo = false;
+    this.dipState = 'high';
+    this.peak = -120;
+    this.trough = 0;
+    this.dipTimes = [];
+    this.pitchHist = [];
+    this.vibrato = false;
+    this.lowSince = 0;
+    this.accrual = [];         // 仮置きの [時刻, 秒数]。トレモロと分かったら取り消し、古くなったら確定する
+    this.state = 'idle';       // idle | rising | watering | tremolo
+    this.events = [];          // 'water' | 'bloom' | 'tremolo' を UI へ渡す（レベル2は {type, key}）
+    // レベル2（タネごと）
+    this.noteHist = [];        // 直近0.12秒の高さ。真ん中の値でタネを決める
+    this.key = null;           // 今鳴っている音のタネ（どれでもなければ null）
+    this.heard = null;         // 今の音がどう聞こえたか（画面の「いまのは〜」用）
+    this.strokeKey = null;     // 今の伸ばしのタネ
+    this.committedBy = {};     // タネごとの確定した秒数
+    this.totalBy = {};         // タネごとの秒数（仮置きを含む。画面に出す値）
+    this.bloomedBy = {};       // 咲いたタネ
+  };
+
+  // 波形を受け取る。長さは何でもよい。
+  Detector.prototype.feed = function (samples) {
+    for (var i = 0; i < samples.length; i++) {
+      var s = samples[i];
+      this.ring[this.ringPos] = s;
+      this.ringPos = (this.ringPos + 1) % this.anaLen;
+      this.blockBuf[this.blockFill++] = s;
+      if (this.blockFill === this.blockLen) {
+        this.blockFill = 0;
+        this._block();
+      }
+    }
+  };
+
+  Detector.prototype._clarity = function () {
+    // McLeod の NSDF（正規化した自己相関）で、周期のはっきりさと高さを見る。
+    var n = this.anaLen, x = new Float32Array(n), p = this.ringPos, i;
+    for (i = 0; i < n; i++) x[i] = this.ring[(p + i) % n];
+    var maxLag = Math.min(this.maxLag, n >> 1);
+    var nsdf = new Float32Array(maxLag + 2);
+    for (var tau = 0; tau <= maxLag + 1; tau++) {
+      var acf = 0, m = 0;
+      for (i = 0; i + tau < n; i++) {
+        acf += x[i] * x[i + tau];
+        m += x[i] * x[i] + x[i + tau] * x[i + tau];
+      }
+      nsdf[tau] = m > 0 ? 2 * acf / m : 0;
+    }
+    // 最初に負へ下がった後の山を集める。はっきりさは、いちばん高い山で決める。
+    var t = 1;
+    while (t <= maxLag && nsdf[t] > 0) t++;
+    var best = 0, bestLag = 0, peaks = [];
+    for (; t <= maxLag; t++) {
+      if (t >= this.minLag && nsdf[t] > nsdf[t - 1] && nsdf[t] >= nsdf[t + 1]) {
+        peaks.push(t);
+        if (nsdf[t] > best) { best = nsdf[t]; bestLag = t; }
+      }
+    }
+    // ビブラートの見分け（レベル1の数え方）には、前の版と同じ粗い高さを使う。
+    // 細かい高さに替えると、揺れの測り方が変わってトレモロの判定まで変わるため。
+    this.pitchCoarse = bestLag ? this.sr / bestLag : 0;
+    // 音の高さは、いちばん高い山の9割を越える最初の山で決める（McLeod の方法）。
+    // いちばん高い山をそのまま使うと、1オクターブ下に聞き違えることがある。
+    var lag = 0;
+    for (var k = 0; k < peaks.length; k++) { if (nsdf[peaks[k]] >= best * 0.9) { lag = peaks[k]; break; } }
+    if (lag) {
+      // 山の頂を放物線で細かく求める（高い音ほど1サンプルの差が大きいので）
+      var a = nsdf[lag - 1], b = nsdf[lag], c = nsdf[lag + 1], den = a - 2 * b + c;
+      var shift = den !== 0 ? 0.5 * (a - c) / den : 0;
+      if (shift > 0.5) shift = 0.5; else if (shift < -0.5) shift = -0.5;
+      this.pitch = this.sr / (lag + shift);
+    } else {
+      this.pitch = 0;
+    }
+    return best;
+  };
+
+  Detector.prototype._block = function () {
+    var o = this.opt, b = this.blockBuf, half = b.length >> 1, s1 = 0, s2 = 0, i;
+    for (i = 0; i < half; i++) s1 += b[i] * b[i];
+    for (; i < b.length; i++) s2 += b[i] * b[i];
+    var db = toDb((s1 + s2) / b.length);
+    this.env = db;
+    this.blockIndex++;
+    if (this.blockIndex % 2 === 0) {
+      this.clarity = db > o.onDb - 6 ? this._clarity() : 0;
+      this._trackPitch();
+      if (this.classify) this._trackNote(db);
+    }
+
+    // 鳴っているか（入りと切れに6dBの幅をつけて、ばたつきを抑える）
+    if (this.gateOpen) { if (db < o.onDb - 6) this.gateOpen = false; }
+    else if (db > o.onDb) this.gateOpen = true;
+
+    // 弓の返しの谷は短い（20〜40ミリ秒）ので、5ミリ秒きざみで見る
+    this.now += this.blockSec / 2;
+    this._trackDips(toDb(s1 / half));
+    this.now += this.blockSec / 2;
+    this._trackDips(toDb(s2 / (b.length - half)));
+
+    // トレモロか: 0.7秒の中に弓の返し（音量の谷）が何回あるか
+    var win = o.tremoloWindowSec, now = this.now;
+    while (this.dipTimes.length && this.dipTimes[0] < now - win) this.dipTimes.shift();
+    var wasTrem = this.tremolo;
+    this.tremolo = this.dipTimes.length >= o.tremoloDips;
+    if (this.tremolo && !wasTrem) this._onTremolo();
+
+    // トレモロと分かるまでの遅れ（窓の長さ＋0.2秒）より古い分を確定し、確定分だけで花を咲かせる
+    var hold = win + 0.2;
+    while (this.accrual.length && this.accrual[0][0] < now - hold) {
+      var ac = this.accrual.shift();
+      this.committed += ac[1];
+      if (this.classify) this.committedBy[ac[2]] = (this.committedBy[ac[2]] || 0) + ac[1];
+    }
+    if (!this.classify) {
+      while (this.committed >= o.bloomSec) {
+        this.committed -= o.bloomSec;
+        this.blooms++;
+        this._emit('bloom');
+      }
+    } else {
+      // タネごとに、確定した秒数が開花の秒数に届いたら1回だけ咲かせる
+      for (var bk in this.committedBy) {
+        if (!this.bloomedBy[bk] && this.committedBy[bk] >= o.bloomSec) {
+          this.bloomedBy[bk] = true;
+          this.blooms++;
+          this._emit({ type: 'bloom', key: Number(bk) });
+        }
+      }
+    }
+
+    var voiced = this.gateOpen && this.clarity >= o.minClarity && !this.tremolo &&
+                 (!this.classify || this.key !== null);
+    // レベル2: 違うタネの音に変わったら、伸ばしを1秒からやり直す
+    if (voiced && this.classify) {
+      if (this.stroke > 0 && this.strokeKey !== this.key) this._endStroke();
+      if (this.stroke === 0) this.strokeKey = this.key;
+    }
+    if (this.tremolo) {
+      this._endStroke();
+      this.state = 'tremolo';
+    } else if (voiced) {
+      this.gap = 0;
+      this.stroke += this.blockSec;
+      if (!this.qualified) {
+        this.state = 'rising';
+        if (this.stroke >= o.waterStartSec) {
+          this.qualified = true;
+          this.waters++;
+          this._emit(this.classify ? { type: 'water', key: this.strokeKey } : 'water');
+          // 水が出るまでの1秒も伸ばした時間として数える（10ミリ秒ずつ、もとの時刻で置く）
+          var n = Math.round(this.stroke / this.blockSec);
+          for (var j = n - 1; j >= 0; j--) this._add(this.blockSec, now - j * this.blockSec);
+        }
+      } else {
+        this.state = 'watering';
+        this._add(this.blockSec, now);
+      }
+    } else {
+      this.gap += this.blockSec;
+      if (this.gap > o.gapHoldSec) { this._endStroke(); this.state = 'idle'; }
+    }
+    this._sumTotal();
+  };
+
+  Detector.prototype._sumTotal = function () {
+    var p = 0;
+    for (var i = 0; i < this.accrual.length; i++) p += this.accrual[i][1];
+    this.total = this.committed + p;
+    if (this.classify) {
+      var by = {};
+      for (var k in this.committedBy) by[k] = this.committedBy[k];
+      for (var j = 0; j < this.accrual.length; j++) {
+        var e = this.accrual[j];
+        by[e[2]] = (by[e[2]] || 0) + e[1];
+      }
+      this.totalBy = by;
+    }
+  };
+
+  Detector.prototype._emit = function (e) {
+    this.events.push(e);
+    if (this.events.length > 50) this.events.shift();   // 画面が止まっていても溜めすぎない
+  };
+
+  Detector.prototype._add = function (sec, time) {
+    this.accrual.push([time, sec, this.strokeKey]);
+  };
+
+  Detector.prototype._endStroke = function () {
+    this.stroke = 0;
+    this.qualified = false;
+    this.gap = 0;
+  };
+
+  Detector.prototype._trackDips = function (db) {
+    // 音量の山から tremoloDipDb 以上落ち、谷から6割戻ったら「谷1つ」。
+    // 山はゆっくり下がる（1秒で30dB）ので、だんだん弱くする音は谷にならない。
+    // 谷が0.3秒より長ければ、弓の返しではなく休み（数えない）。
+    // ビブラートは音量も少し揺れるので、音の高さが揺れている間は谷の基準を3dB深くする。
+    var d = this.opt.tremoloDipDb + (this.vibrato ? 3 : 0), on = this.opt.onDb;
+    if (this.dipState === 'high') {
+      this.peak = Math.max(db, this.peak - 0.15);
+      if (this.peak > on && db < this.peak - d) { this.dipState = 'low'; this.trough = db; this.lowSince = this.now; }
+    } else {
+      if (db < this.trough) this.trough = db;
+      if (db > this.trough + d * 0.6 && db > on - 6) {
+        this.dipState = 'high';
+        this.peak = db;
+        if (this.now - this.lowSince <= 0.3) this.dipTimes.push(this.now);
+      } else if (this.now - this.lowSince > 0.3 && db < on - 6) {
+        this.dipState = 'high';
+        this.peak = db;
+      }
+    }
+  };
+
+  Detector.prototype._trackPitch = function () {
+    // 直近0.5秒の音の高さ（はっきりした所だけ）の揺れ幅をセントで見る。
+    // 20セント以上揺れていればビブラート。トレモロは同じ高さのままなので揺れない。
+    var ph = this.pitchHist;
+    if (this.clarity >= 0.8 && this.pitchCoarse > 0) ph.push([this.now, 1200 * Math.log2(this.pitchCoarse / 440)]);
+    while (ph.length && ph[0][0] < this.now - 0.5) ph.shift();
+    if (ph.length < 10) { this.vibrato = false; return; }
+    var c = ph.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; });
+    var lo = c[Math.floor(c.length * 0.1)], hi = c[Math.floor(c.length * 0.9)];
+    var med = c[c.length >> 1];
+    // 半音以上の動き（音が変わった）はビブラートと呼ばない
+    this.vibrato = (hi - lo) >= 20 && (hi - lo) <= 100 && Math.abs(hi - med) < 60;
+  };
+
+  Detector.prototype._onTremolo = function () {
+    // トレモロと分かる前に数えてしまった分を取り消す（最初の谷の少し前から）。
+    // 取り消すのはまだ仮置きの分だけ。確定した分と咲いた回数には触らない。
+    var from = this.dipTimes[0] - 0.2;
+    this.accrual = this.accrual.filter(function (e) { return e[0] < from; });
+    this._sumTotal();
+    this._emit(this.classify ? { type: 'tremolo', key: null } : 'tremolo');
+  };
+
+  Detector.prototype._trackNote = function (db) {
+    // 直近0.12秒の、はっきりした高さの真ん中の値でタネを決める。
+    // 弾き始めのゆれや、1コマだけの聞き違いで別のタネへ飛ばないようにする。
+    var nh = this.noteHist;
+    if (db > this.opt.onDb - 6 && this.clarity >= this.opt.minClarity && this.pitch > 0) nh.push([this.now, this.pitch]);
+    while (nh.length && nh[0][0] < this.now - 0.12) nh.shift();
+    if (nh.length < 3) { this.key = null; this.heard = null; return; }
+    var f = nh.map(function (e) { return e[1]; }).sort(function (a, b) { return a - b; })[nh.length >> 1];
+    var r = this.classify(f);
+    this.key = (r && r.key !== null && r.key !== undefined) ? r.key : null;
+    this.heard = r ? (r.heard || null) : null;
+  };
+
+  Detector.prototype.takeEvents = function () {
+    var e = this.events; this.events = []; return e;
+  };
+
+  Detector.DEFAULTS = DEFAULTS;
+  root.SustainDetector = Detector;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Detector;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+// レベル2「ゆびのタネ」の音の高さ → タネの決め方。yubi.html にも同じ中身を埋め込む。
+// 候補は4本の弦すべての 0〜4 の指（1ポジション）。いちばん近い候補が、選んだ弦の音ならそのタネ。
+// 判定の考え方は「ゆびいろ」に合わせる（いちばん近い候補で決め、半音ずれは外れにする）。
+(function (root) {
+  'use strict';
+
+  // 開放弦の高さ（MIDI番号）と色。色は教室の決まり（G青・Dオレンジ・A赤・E緑）
+  var STRINGS = {
+    G: { midi: 55, name: 'ソ', color: '#1F5FD1' },
+    D: { midi: 62, name: 'レ', color: '#EE8A00' },
+    A: { midi: 69, name: 'ラ', color: '#CC1030' },
+    E: { midi: 76, name: 'ミ', color: '#138A3A' }
+  };
+  var ORDER = ['G', 'D', 'A', 'E'];
+
+  // 指ごとの、開放弦からの半音の数。2の指だけ高い（+4）と低い（+3）を選べる
+  function fingerSteps(high2) { return [0, 2, high2 ? 4 : 3, 5, 7]; }
+
+  var PC = ['ド', 'ド♯', 'レ', 'レ♯', 'ミ', 'ファ', 'ファ♯', 'ソ', 'ソ♯', 'ラ', 'ラ♯', 'シ'];
+  function noteName(midi) { return PC[((midi % 12) + 12) % 12]; }
+
+  // opts = {string:'A', high2:{G:true,D:true,A:true,E:true}, tolCents:90, a4:442}
+  function make(opts) {
+    var chosen = opts.string;
+    var tol = opts.tolCents || 90;
+    var a4 = opts.a4 || 442;
+    var high2 = opts.high2 || {};
+    // 同じ高さが2つの弦にある時（ラ線の4＝ミ線の0 など）は、選んだ弦の方をとる
+    // ほかの弦どうしで重なる時は、指の少ない方（開放弦）の名前で呼ぶ（ゆびいろと同じ）
+    var cand = [], seen = {};
+    function add(s, f) {
+      var m = STRINGS[s].midi + fingerSteps(high2[s] !== false)[f];
+      if (seen[m]) return;
+      seen[m] = true;
+      cand.push({ str: s, finger: f, midi: m });
+    }
+    for (var f0 = 0; f0 < 5; f0++) add(chosen, f0);
+    for (var f1 = 0; f1 < 5; f1++) {
+      for (var i = 0; i < ORDER.length; i++) if (ORDER[i] !== chosen) add(ORDER[i], f1);
+    }
+
+    var fn = function (hz) {
+      if (!(hz > 0)) return { key: null, heard: null };
+      var mf = 69 + 12 * Math.log2(hz / a4);
+      var best = null, bestD = 1e9;
+      for (var j = 0; j < cand.length; j++) {
+        var d = (mf - cand[j].midi) * 100;
+        if (Math.abs(d) < Math.abs(bestD)) { bestD = d; best = cand[j]; }
+      }
+      if (!best || Math.abs(bestD) > tol) return { key: null, heard: { off: true, cents: best ? bestD : 0 } };
+      var heard = { str: best.str, finger: best.finger, midi: best.midi, cents: bestD };
+      return { key: best.str === chosen ? best.finger : null, heard: heard };
+    };
+    fn.targets = cand.filter(function (c) { return c.str === chosen; })
+                     .sort(function (a, b) { return a.finger - b.finger; });
+    return fn;
+  }
+
+  var api = { STRINGS: STRINGS, ORDER: ORDER, fingerSteps: fingerSteps, noteName: noteName, make: make };
+  root.Tane = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  /* ---------- 置き場所と初期値 ---------- */
+  var SHARED_KEY = 'wg_cfg_v1';     // レベル1と同じ値（水の秒数・音の大きさ・トレモロ）
+  var OWN_KEY = 'wg2_cfg_v1';       // レベル2だけの値
+  var DIP_SCALE = { 4: 'きびしめ', 6: 'ふつう', 9: 'ゆるめ' };
+  var TOL_SCALE = { 40: 'きびしめ', 60: 'ふつう', 90: 'ゆるめ' };
+  var CELEB_MS = 3000;
+  var SEEDS = 5;
+
+  var cfg = {
+    waterStartSec: 1.0, onDb: -45, tremoloDipDb: 6,
+    seedSec: 15, tol: 90, a4: 442, string: '',
+    high2: { G: true, D: true, A: true, E: true }
+  };
+
+  function readJson(key) {
+    try { var raw = window.localStorage.getItem(key); var o = raw ? JSON.parse(raw) : null; return (o && typeof o === 'object') ? o : null; }
+    catch (e) { return null; }
+  }
+  function num(v) { return typeof v === 'number' && isFinite(v); }
+  function readCfg() {
+    var s = readJson(SHARED_KEY);
+    if (s) {
+      if (num(s.waterStartSec)) cfg.waterStartSec = clamp(Math.round(s.waterStartSec * 10) / 10, 0.5, 2);
+      if (num(s.onDb)) cfg.onDb = clamp(Math.round(s.onDb), -70, -20);
+      if (num(s.tremoloDipDb)) cfg.tremoloDipDb = clamp(s.tremoloDipDb, 4, 9);
+    }
+    var o = readJson(OWN_KEY);
+    if (o) {
+      if (num(o.seedSec)) cfg.seedSec = clamp(Math.round(o.seedSec), 5, 60);
+      if (o.tol === 40 || o.tol === 60 || o.tol === 90) cfg.tol = o.tol;
+      if (num(o.a4)) cfg.a4 = clamp(Math.round(o.a4), 440, 443);
+      if (typeof o.string === 'string' && /^[GDAE]$/.test(o.string)) cfg.string = o.string;
+      if (o.high2 && typeof o.high2 === 'object') {
+        ['G', 'D', 'A', 'E'].forEach(function (k) { if (typeof o.high2[k] === 'boolean') cfg.high2[k] = o.high2[k]; });
+      }
+    }
+  }
+  function saveCfg() {
+    try {
+      // レベル1の値（開花の秒数など）は残したまま、共通の3つだけ書き換える
+      var s = readJson(SHARED_KEY) || {};
+      s.waterStartSec = cfg.waterStartSec; s.onDb = cfg.onDb; s.tremoloDipDb = cfg.tremoloDipDb;
+      window.localStorage.setItem(SHARED_KEY, JSON.stringify(s));
+      window.localStorage.setItem(OWN_KEY, JSON.stringify({
+        seedSec: cfg.seedSec, tol: cfg.tol, a4: cfg.a4, string: cfg.string, high2: cfg.high2
+      }));
+    } catch (e) { /* 保存できなくても動く */ }
+  }
+  readCfg();
+
+  function detOpts() {
+    return { waterStartSec: cfg.waterStartSec, onDb: cfg.onDb, tremoloDipDb: cfg.tremoloDipDb, bloomSec: cfg.seedSec };
+  }
+  function makeClassifier() {
+    return window.Tane.make({ string: cfg.string || 'A', high2: cfg.high2, tolCents: cfg.tol, a4: cfg.a4 });
+  }
+
+  /* ---------- 判定の核 ---------- */
+  var det = new window.SustainDetector(48000, detOpts());
+  det.setClassifier(makeClassifier());
+
+  /* ---------- 画面の部品 ---------- */
+  var appEl = $('app');
+  var scene = $('scene');
+  var garden = $('garden');
+  var canWrap = $('canWrap');
+  var drops = $('drops');
+  var sparkles = $('sparkles');
+  var hintEl = $('hint');
+  var bloomLine = $('bloomLine');
+  var startBtn = $('startBtn');
+  var againBtn = $('againBtn');
+  var pickBtn = $('pickBtn');
+  var pickEl = $('pick');
+  var settings = $('settings');
+
+  /* ---------- はたけを作る ---------- */
+  var plots = [];
+  (function () {
+    var tpl = $('plantTpl');
+    for (var i = 0; i < SEEDS; i++) {
+      var p = document.createElement('div');
+      p.className = 'plot';
+      p.innerHTML = '<div class="pplant"></div><div class="lip"></div>' +
+        '<div class="tag"><b>' + i + '</b></div>';
+      var pp = p.querySelector('.pplant');
+      pp.appendChild(document.importNode(tpl.content, true));
+      garden.appendChild(p);
+      plots.push({
+        el: p, stages: Array.prototype.slice.call(pp.querySelectorAll('.stage')),
+        tag: p.querySelector('.tag'),
+        shown: '', lastPct: -1, done: false, hear: false
+      });
+    }
+  })();
+
+  /* ---------- 絵の差し替え（images/ があれば使う） ---------- */
+  function bindSwap(img, box) {
+    if (!img || !box) return;
+    var on = function () { if (img.naturalWidth > 0) box.classList.add('img-ok'); };
+    var off = function () { box.classList.remove('img-ok'); };
+    img.addEventListener('load', on);
+    img.addEventListener('error', off);
+    if (img.complete) { if (img.naturalWidth > 0) on(); else off(); }
+  }
+  (function () {
+    var assets = document.querySelectorAll('img.asset');
+    for (var i = 0; i < assets.length; i++) bindSwap(assets[i], assets[i].parentElement);
+    bindSwap(document.querySelector('#bgbox .bgimg'), $('bgbox'));
+    bindSwap(drops.querySelector('.probe'), drops);
+  })();
+
+  /* ---------- 状態 ---------- */
+  var canVisible = false, canShownAt = 0, canKey = -1, pourAt = -1, dropsOn = false;
+  var CAN_MIN_MS = 1500;
+  var finished = false, celebrating = false, celebUntil = 0;
+  var hintTxt = '', hintCand = '', hintCandSince = 0, hintUntil = 0;
+  var lastDone = -1, lastWaters = -1;
+
+  function stageFor(p) {
+    if (p >= 1) return 'flower';
+    if (p >= 0.70) return 'bud';
+    if (p >= 0.35) return 'stem';
+    if (p >= 0.10) return 'sprout';
+    return 'seed';
+  }
+  function setPlotStage(pl, s) {
+    if (s === pl.shown) return;
+    pl.shown = s;
+    for (var i = 0; i < pl.stages.length; i++) pl.stages[i].classList.toggle('show', pl.stages[i].getAttribute('data-stage') === s);
+  }
+
+  /* ---------- 弦 ---------- */
+  var STR_LABEL = { G: 'ソせん', D: 'レせん', A: 'ラせん', E: 'ミせん' };
+  function applyString() {
+    var s = cfg.string || 'A';
+    appEl.style.setProperty('--c', window.Tane.STRINGS[s].color);
+    $('strName').textContent = STR_LABEL[s];
+  }
+
+  /* ---------- ジョウロ ---------- */
+  function placeCan(k) {
+    var sr = scene.getBoundingClientRect();
+    var pr = plots[k].el.getBoundingClientRect();
+    var cw = canWrap.offsetWidth || 100;
+    // 注ぎ口がタネの少し右上に来るよう、ジョウロを右に置く。はしでは画面からはみ出さない
+    var left = (pr.left - sr.left) + pr.width * 0.5 + pr.width * 0.12;
+    left = clamp(left, 4, sr.width - cw - 4);
+    canWrap.style.left = Math.round(left) + 'px';
+    var spoutX = left + cw * 0.758;
+    var spoutY = canWrap.offsetTop + (canWrap.offsetHeight || 0) * 0.787;
+    var tag = plots[k].el.querySelector('.lip').getBoundingClientRect();
+    var targetX = (tag.left - sr.left) + tag.width * 0.5;
+    var targetY = (tag.top - sr.top) + 4;
+    var dx = clamp(targetX - spoutX, -400, 120), fall = clamp(targetY - spoutY, 30, 520);
+    drops.style.setProperty('--dx', Math.round(dx) + 'px');
+    drops.style.setProperty('--dxh', Math.round(dx * 0.55) + 'px');
+    drops.style.setProperty('--fall', Math.round(fall) + 'px');
+    drops.style.setProperty('--fallh', Math.round(fall * 0.40) + 'px');
+  }
+  function showCan(t, k) {
+    canShownAt = t;
+    if (canVisible && canKey === k) return;
+    canKey = k;
+    placeCan(k);
+    if (!canVisible) { canVisible = true; pourAt = t + 250; canWrap.classList.add('on'); }
+    else { pourAt = t + 350; }   // 別のタネへ動く間は水を止める
+  }
+  function hideCan() { canVisible = false; canWrap.classList.remove('on'); }
+  window.addEventListener('resize', function () { if (canKey >= 0) placeCan(canKey); });
+
+  /* ---------- ヒント ---------- */
+  function setHint(html) {
+    if (html === hintTxt) return;
+    hintTxt = html;
+    if (html) hintEl.innerHTML = html;
+    hintEl.classList.toggle('show', !!html);
+  }
+  function strSpan(s) {
+    return '<span class="s" style="color:' + window.Tane.STRINGS[s].color + '">' + STR_LABEL[s] + '</span>';
+  }
+
+  /* ---------- 咲いた・おしまい ---------- */
+  function bloomPlot(t, k) {
+    var pl = plots[k];
+    if (!pl || pl.done) return;
+    pl.done = true;
+    pl.el.classList.add('done');
+    setPlotStage(pl, 'flower');
+    pl.el.classList.remove('pop'); void pl.el.offsetWidth; pl.el.classList.add('pop');
+    setTimeout(function () { pl.el.classList.remove('pop'); }, 1000);
+    if (canKey === k) hideCan();
+    var n = doneCount();
+    if (n >= SEEDS) finish(t);
+  }
+  function doneCount() { var n = 0; for (var i = 0; i < SEEDS; i++) if (plots[i].done) n++; return n; }
+  function finish(t) {
+    finished = true;
+    det.pause();
+    hideCan();
+    setHint('');
+    celebrating = true; celebUntil = t + CELEB_MS;
+    sparkles.classList.remove('go'); void sparkles.offsetWidth; sparkles.classList.add('go');
+    bloomLine.innerHTML = 'ぜんぶ さいたね！';
+    startBtn.hidden = true;
+    againBtn.hidden = false;
+  }
+  function resetGame() {
+    finished = false;
+    det.reset();
+    det.setClassifier(makeClassifier());
+    celebrating = false;
+    sparkles.classList.remove('go');
+    hideCan(); canKey = -1;
+    setHint('');
+    for (var i = 0; i < SEEDS; i++) {
+      var pl = plots[i];
+      pl.done = false; pl.lastPct = -1;
+      pl.el.classList.remove('done', 'pop', 'hear'); pl.hear = false;
+      setPlotStage(pl, 'seed');
+    }
+    bloomLine.innerHTML = '<span class="str" id="strName"></span>の タネを さかせよう';
+    applyString();
+    againBtn.hidden = true;
+    startBtn.hidden = false;
+    lastDone = -1; lastWaters = -1;
+  }
+
+  againBtn.addEventListener('click', function () {
+    resetGame();
+    if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
+  });
+  pickBtn.addEventListener('click', function () { pickEl.hidden = false; det.pause(); hideCan(); setHint(''); });
+  $('pickRow').addEventListener('click', function (e) {
+    var b = e.target;
+    while (b && b.tagName !== 'BUTTON') b = b.parentNode;
+    if (!b) return;
+    var s = b.getAttribute('data-str');
+    pickEl.hidden = true;
+    // 同じ弦を選んだ時は、途中から続ける（「げんを かえる」を間違えて押した時のため）
+    if (s !== cfg.string || finished) {
+      cfg.string = s;
+      saveCfg();
+      resetGame();
+    }
+    // 弦を選んだその場で聞き始める（押した直後でないと音の処理を始められないブラウザがある）
+    if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
+  });
+
+  /* ---------- 毎コマの更新 ---------- */
+  function frame(t) {
+    requestAnimationFrame(frame);
+    var d = det;
+
+    var evs = d.takeEvents();
+    for (var i = 0; i < evs.length; i++) {
+      if (finished) break;
+      var ev = evs[i];
+      if (!ev || typeof ev !== 'object') continue;
+      if (ev.type === 'water' && ev.key !== null && plots[ev.key]) {
+        if (plots[ev.key].done) { setHint('<span class="s">' + ev.key + '</span> は もう さいたよ'); hintUntil = t + 1800; }
+        else showCan(t, ev.key);
+      } else if (ev.type === 'bloom' && plots[ev.key]) {
+        bloomPlot(t, ev.key);
+      }
+    }
+
+    // 咲いたタネは判定器の状態からも拾う（画面が止まっていて知らせが溢れた時の取りこぼし対策）
+    if (!finished) {
+      for (var bk = 0; bk < SEEDS; bk++) if (d.bloomedBy[bk] && !plots[bk].done) bloomPlot(t, bk);
+    }
+
+    // ジョウロ: トレモロ・別のタネ・止めて1.5秒で下げる
+    if (canVisible && (d.state === 'tremolo' ||
+        (d.state === 'watering' && d.strokeKey !== canKey) ||
+        (d.state !== 'watering' && t >= canShownAt + CAN_MIN_MS))) hideCan();
+    var pour = canVisible && d.state !== 'tremolo' && t >= pourAt;
+    if (pour !== dropsOn) { dropsOn = pour; drops.classList.toggle('on', pour); }
+
+    // 今鳴っている音のタネを光らせる
+    var hearKey = (!finished && d.gateOpen && d.key !== null) ? d.key : -1;
+    for (var p = 0; p < SEEDS; p++) {
+      var h = p === hearKey;
+      if (h !== plots[p].hear) { plots[p].hear = h; plots[p].el.classList.toggle('hear', h); }
+    }
+
+    // ヒント: 0.3秒続いた時だけ出す（一瞬の聞き違いで出したり消したりしない）
+    var cand = '';
+    if (!finished && d.gateOpen) {
+      if (d.state === 'tremolo') cand = 'のばしてね';
+      else if (d.key === null && d.heard && d.heard.str) cand = 'いまのは ' + strSpan(d.heard.str) + 'の <span class="s">' + d.heard.finger + '</span>';
+      else if (d.key === null && d.heard && d.heard.off) cand = 'どの タネかな？';
+    }
+    if (cand !== hintCand) { hintCand = cand; hintCandSince = t; }
+    if (t >= hintUntil) {
+      if (cand === 'のばしてね') setHint(cand);
+      else if (cand && t - hintCandSince >= 300) setHint(cand);
+      else if (!cand) setHint('');
+    }
+
+    if (celebrating && t >= celebUntil) { celebrating = false; sparkles.classList.remove('go'); }
+
+    // はたけごとの育ちぐあい
+    var secs = d.opt.bloomSec;
+    for (var k = 0; k < SEEDS; k++) {
+      var pl = plots[k];
+      var tot = d.totalBy[k] || 0;
+      var pct = pl.done ? 1 : clamp(tot / secs, 0, 1);
+      setPlotStage(pl, pl.done ? 'flower' : stageFor(Math.min(pct, 0.99)));
+      var p100 = Math.round(pct * 100);
+      if (p100 !== pl.lastPct) { pl.lastPct = p100; pl.tag.style.setProperty('--p', String(p100)); }
+    }
+
+    var dn = doneCount();
+    if (dn !== lastDone) { lastDone = dn; $('doneN').textContent = String(dn); }
+    if (d.waters !== lastWaters) { lastWaters = d.waters; $('waterN').textContent = String(d.waters); }
+
+    if (settings.classList.contains('open')) {
+      $('meterFill').style.width = (clamp((d.env + 70) / 50, 0, 1) * 100).toFixed(0) + '%';
+    }
+  }
+
+  /* ---------- せってい ---------- */
+  var twoGroup = $('twoGroup');
+  (function () {
+    var html = '';
+    ['G', 'D', 'A', 'E'].forEach(function (s) {
+      var m = window.Tane.STRINGS[s].midi;
+      html += '<span class="sn" style="color:' + window.Tane.STRINGS[s].color + '">' + STR_LABEL[s] + '</span>' +
+        '<div class="seg" data-s="' + s + '">' +
+        '<button type="button" data-h="1">高い2（' + window.Tane.noteName(m + 4) + '）</button>' +
+        '<button type="button" data-h="0">低い2（' + (window.Tane.noteName(m + 3) === 'ラ♯' ? 'シ♭' : window.Tane.noteName(m + 3)) + '）</button></div>';
+    });
+    twoGroup.innerHTML = html;
+  })();
+
+  function markOn(group, attr, val) {
+    var bs = group.getElementsByTagName('button');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].getAttribute(attr) === String(val));
+  }
+  function syncSettingsUI() {
+    $('seedIn').value = String(cfg.seedSec); $('seedOut').textContent = String(cfg.seedSec);
+    $('waterIn').value = String(cfg.waterStartSec); $('waterOut').textContent = cfg.waterStartSec.toFixed(1);
+    $('onDbIn').value = String(cfg.onDb); $('onDbOut').textContent = String(cfg.onDb);
+    $('meterMark').style.left = (clamp((cfg.onDb + 70) / 50, 0, 1) * 100).toFixed(1) + '%';
+    $('segOut').textContent = DIP_SCALE[cfg.tremoloDipDb] || 'ふつう';
+    markOn($('segGroup'), 'data-dip', cfg.tremoloDipDb);
+    $('tolOut').textContent = TOL_SCALE[cfg.tol];
+    markOn($('tolGroup'), 'data-tol', cfg.tol);
+    $('a4Out').textContent = String(cfg.a4);
+    markOn($('a4Group'), 'data-a4', cfg.a4);
+    var segs = twoGroup.querySelectorAll('.seg');
+    for (var i = 0; i < segs.length; i++) markOn(segs[i], 'data-h', cfg.high2[segs[i].getAttribute('data-s')] ? 1 : 0);
+  }
+  function btnOf(e, root) {
+    var b = e.target;
+    while (b && b !== root && b.tagName !== 'BUTTON') b = b.parentNode;
+    return (b && b !== root) ? b : null;
+  }
+
+  $('seedIn').addEventListener('input', function () {
+    cfg.seedSec = clamp(parseInt($('seedIn').value, 10) || 15, 5, 60);
+    $('seedOut').textContent = String(cfg.seedSec);
+    det.setOptions({ bloomSec: cfg.seedSec });
+    saveCfg();
+  });
+  $('waterIn').addEventListener('input', function () {
+    cfg.waterStartSec = clamp(Math.round((parseFloat($('waterIn').value) || 1) * 10) / 10, 0.5, 2);
+    $('waterOut').textContent = cfg.waterStartSec.toFixed(1);
+    det.setOptions({ waterStartSec: cfg.waterStartSec });
+    saveCfg();
+  });
+  $('onDbIn').addEventListener('input', function () {
+    cfg.onDb = clamp(parseInt($('onDbIn').value, 10) || -45, -70, -20);
+    $('onDbOut').textContent = String(cfg.onDb);
+    $('meterMark').style.left = (clamp((cfg.onDb + 70) / 50, 0, 1) * 100).toFixed(1) + '%';
+    det.setOptions({ onDb: cfg.onDb });
+    saveCfg();
+  });
+  $('segGroup').addEventListener('click', function (e) {
+    var b = btnOf(e, this); if (!b) return;
+    cfg.tremoloDipDb = Number(b.getAttribute('data-dip'));
+    det.setOptions({ tremoloDipDb: cfg.tremoloDipDb });
+    saveCfg(); syncSettingsUI();
+  });
+  $('tolGroup').addEventListener('click', function (e) {
+    var b = btnOf(e, this); if (!b) return;
+    cfg.tol = Number(b.getAttribute('data-tol'));
+    det.setClassifier(makeClassifier());
+    saveCfg(); syncSettingsUI();
+  });
+  $('a4Group').addEventListener('click', function (e) {
+    var b = btnOf(e, this); if (!b) return;
+    cfg.a4 = Number(b.getAttribute('data-a4'));
+    det.setClassifier(makeClassifier());
+    saveCfg(); syncSettingsUI();
+  });
+  twoGroup.addEventListener('click', function (e) {
+    var b = btnOf(e, this); if (!b) return;
+    var s = b.parentNode.getAttribute('data-s');
+    cfg.high2[s] = b.getAttribute('data-h') === '1';
+    det.setClassifier(makeClassifier());
+    saveCfg(); syncSettingsUI();
+  });
+  $('gearBtn').addEventListener('click', function () {
+    // レベル1の画面で変えた共通の値を読み直してから出す（古い値で書き戻さない）
+    readCfg();
+    det.setOptions(detOpts());
+    settings.classList.add('open'); syncSettingsUI();
+  });
+  $('closeSettings').addEventListener('click', function () { settings.classList.remove('open'); });
+  settings.addEventListener('click', function (e) { if (e.target === settings) settings.classList.remove('open'); });
+
+  /* ---------- マイク ---------- */
+  var audio = { ctx: null, stream: null, src: null, sp: null, mute: null };
+
+  function reasonOf(err) {
+    var n = (err && err.name) || '';
+    if (n === 'NotAllowedError' || n === 'SecurityError') return 'マイクの使用が許可されていません';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'マイクが見つかりません';
+    if (n === 'NotReadableError' || n === 'TrackStartError') return 'マイクがほかのアプリで使われています';
+    if (n === 'OverconstrainedError') return 'マイクの設定が合いません';
+    if (err && err.message) return String(err.message);
+    return 'はっきりしない理由';
+  }
+  function showMicError(reason) {
+    $('micErrTitle').textContent = 'マイクが使えません: ' + reason;
+    $('micErrSub').textContent = 'https://ngmt4amtk-web.github.io/violin-mizuyari/ から開くと、マイクを使えます。';
+    $('micErr').classList.add('show');
+  }
+  function hideMicError() { $('micErr').classList.remove('show'); }
+  function teardown() {
+    if (audio.stream) { try { audio.stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) { /* 無視 */ } }
+    audio.ctx = null; audio.stream = null; audio.src = null; audio.sp = null; audio.mute = null;
+  }
+
+  var starting = false;   // マイクの許可を待っている間に、もう一度始めない（2本で聞くと2倍速になる）
+  function startAudio() {
+    if (starting) return;
+    if (audio.ctx) {
+      if (audio.ctx.state !== 'running') audio.ctx.resume().catch(function () { /* もう一度押せばよい */ });
+      return;
+    }
+    hideMicError();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showMicError('このブラウザではマイクを使えません'); return; }
+    if (window.isSecureContext === false) { showMicError('安全でない接続のためマイクを使えません'); return; }
+    startBtn.disabled = true;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { startBtn.disabled = false; showMicError('このブラウザでは音の処理ができません'); return; }
+    var ctx0 = new AC();
+    ctx0.resume().catch(function () { /* 後で再開する */ });
+    starting = true;
+
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    }).then(function (stream) {
+      starting = false;
+      audio.stream = stream;
+      audio.ctx = ctx0;
+      var ctx = ctx0;
+      if (typeof ctx.createScriptProcessor !== 'function') throw new Error('ScriptProcessor が使えません');
+      var src = ctx.createMediaStreamSource(stream);
+      var sp = ctx.createScriptProcessor(2048, 1, 1);
+      var mute = ctx.createGain();
+      mute.gain.value = 0;
+
+      // 前の判定器から、タネごとの秒数・咲いたタネ・水やりの回数を引き継ぐ
+      var prev = det;
+      det = new window.SustainDetector(ctx.sampleRate, detOpts());
+      det.setClassifier(makeClassifier());
+      for (var k in prev.totalBy) { det.committedBy[k] = prev.totalBy[k]; }
+      for (var b in prev.bloomedBy) { det.bloomedBy[b] = prev.bloomedBy[b]; }
+      det.committed = prev.total; det.total = prev.total;
+      det.waters = prev.waters; det.blooms = prev.blooms;
+      det._sumTotal();
+      wg.detector = det;
+
+      sp.onaudioprocess = function (e) {
+        if (finished || !pickEl.hidden) return;   // 咲き終わった後と、弦を選んでいる間は数えない
+        det.feed(e.inputBuffer.getChannelData(0));
+      };
+      function syncBtn() {
+        if (ctx.state === 'running') { startBtn.textContent = 'きいているよ'; startBtn.disabled = true; }
+        else if (ctx.state !== 'closed') { det.pause(); startBtn.textContent = 'つづける'; startBtn.disabled = false; }
+      }
+      ctx.onstatechange = syncBtn;
+      stream.getAudioTracks().forEach(function (tr) {
+        tr.addEventListener('ended', function () {
+          det.pause();
+          try { ctx.close(); } catch (e) { /* 無視 */ }
+          teardown();
+          startBtn.textContent = 'はじめる';
+          startBtn.disabled = false;
+          showMicError('マイクが切れました');
+        });
+      });
+      src.connect(sp); sp.connect(mute); mute.connect(ctx.destination);
+      audio.src = src; audio.sp = sp; audio.mute = mute;
+      syncBtn();
+      ctx.resume().catch(function () { /* 「つづける」から再開できる */ });
+      lastDone = -1; lastWaters = -1;
+    }).catch(function (err) {
+      starting = false;
+      if (!audio.sp) { teardown(); try { ctx0.close(); } catch (e) { /* 無視 */ } }
+      startBtn.disabled = false;
+      showMicError(reasonOf(err));
+    });
+  }
+  startBtn.addEventListener('click', startAudio);
+
+  /* ---------- テスト用の口 ---------- */
+  var wg = {
+    detector: det,
+    audio: audio,
+    getState: function () {
+      var by = {};
+      for (var k in det.totalBy) by[k] = Math.round(det.totalBy[k] * 100) / 100;
+      return {
+        string: cfg.string, state: det.state, key: det.key, by: by,
+        done: plots.map(function (p) { return p.done ? 1 : 0; }).join(''),
+        stages: plots.map(function (p) { return p.shown; }).join(','),
+        waters: det.waters, canVisible: canVisible, canKey: canKey, finished: finished,
+        hint: hintEl.classList.contains('show') ? hintEl.textContent : '',
+        button: startBtn.textContent + (startBtn.disabled ? '(押せない)' : '(押せる)'),
+        pick: !pickEl.hidden
+      };
+    }
+  };
+  window.__wg = wg;
+
+  /* ---------- 起し ---------- */
+  applyString();
+  for (var i0 = 0; i0 < SEEDS; i0++) setPlotStage(plots[i0], 'seed');
+  syncSettingsUI();
+  requestAnimationFrame(frame);
+
+  // 試験用: ?string=A&autostart=1 で弦を選んだ状態から始める
+  var qs = window.location.search;
+  var qm = /[?&]string=([GDAE])(&|$)/.exec(qs);
+  if (qm) { cfg.string = qm[1]; pickEl.hidden = true; resetGame(); }
+  if (/[?&]autostart=1(&|$)/.test(qs)) setTimeout(startAudio, 60);
+})();
+</script>
+</body>
+</html>

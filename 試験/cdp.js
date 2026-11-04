@@ -1,7 +1,7 @@
 // 使い方: node cdp.js <wav> <秒数> <ログ出力>
 const {spawn}=require('child_process'); const fs=require('fs');
 const [wavPath,secs,out,shotsArg]=process.argv.slice(2); const acts=(process.env.ACT||'').split(';').filter(Boolean).map(a=>{const k=a.indexOf(':');return [Number(a.slice(0,k)),a.slice(k+1)]}); const shots=(shotsArg||'').split(',').filter(Boolean).map(Number); const port=9300+Math.floor(Math.random()*500);
-const app=(process.env.APP||'file:///Users/ngmt.mtk/Shortcuts/ヘルメス成果物/2026-11-04_水やりゲーム/app.html')+'?autostart=1';
+const base=process.env.APP||('file://'+require('path').resolve(__dirname,'../app.html')); const app=process.env.NOAUTO?base:base+(base.includes('?')?'&':'?')+'autostart=1';
 const ud=fs.mkdtempSync(require('os').tmpdir()+'/wgchrome-');
 const ch=spawn('/usr/bin/google-chrome',['--headless=new','--no-sandbox','--disable-gpu',`--remote-debugging-port=${port}`,`--user-data-dir=${ud}`,
  '--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream',`--use-file-for-fake-audio-capture=${wavPath}%noloop`,
