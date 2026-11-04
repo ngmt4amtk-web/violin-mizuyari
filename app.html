@@ -79,7 +79,7 @@
     --soilW: min(80vmin, 760px);
     --soilH: min(18vmin, 170px);
     --moundH: calc(var(--soilH) * 1.15);
-    --plantH: min(52vmin, 42vh, 520px);
+    --plantH: min(60vmin, 50vh, 600px);
     --canW: min(28vmin, 240px);
     --canH: calc(var(--canW) * 0.95);
     --moundBottom: 5.5%;
@@ -90,8 +90,9 @@
     :root { --moundBottom: 16%; }
   }
 
-  /* 土（ひとつの山） */
-  #mound {
+  /* 土（ひとつの山）。#moundFront は同じ山の写しで、植物の根元より下だけを手前に重ねる（植物が土に植わって見える） */
+  :root { --plantDepth: calc(var(--moundH) * 0.16); }
+  #mound, #moundFront {
     position: absolute; left: 50%; bottom: var(--moundBottom);
     width: var(--soilW); height: var(--moundH);
     transform: translateX(-50%);
@@ -99,12 +100,13 @@
     overflow: hidden; z-index: 1;
     box-shadow: 0 10px 22px rgba(60,40,20,.16);
   }
-  #mound > .asset { object-fit: cover; }
-  #soilFallback {
+  #moundFront { z-index: 3; clip-path: inset(16% 0 0 0); pointer-events: none; }
+  #mound > .asset, #moundFront > .asset { object-fit: cover; }
+  #soilFallback, #moundFront > .fallback {
     position: absolute; inset: 0;
     background: linear-gradient(#a56e46 0%, #90603a 34%, #7d4f2c 78%);
   }
-  #mound::after {
+  #mound::after, #moundFront::after {
     content: ""; position: absolute; left: 4%; right: 4%; top: -6%; height: 46%;
     border-radius: 50%;
     background: radial-gradient(ellipse at 50% 55%, rgba(214,160,116,.55), rgba(214,160,116,0) 72%);
@@ -123,21 +125,20 @@
   .swap.img-ok > .asset { opacity: 1; }
 
   /* 植物（育ちぐあいの段階ごと） */
-  /* 株もとの小さな土のこぶ（植物の根元を隠す） */
+  /* 株もとの植え穴。下半分は手前の土に隠れ、奥の縁だけが暗く見える */
   #soilLip {
-    position: absolute; left: 50%; z-index: 3;
-    bottom: calc(var(--moundBottom) + var(--moundH) - 12px);
-    width: calc(var(--soilW) * 0.36); height: calc(var(--soilW) * 0.048);
+    position: absolute; left: 50%; z-index: 1;
+    bottom: calc(var(--moundBottom) + var(--moundH) - var(--plantDepth) - var(--soilW) * 0.02);
+    width: calc(var(--soilW) * 0.17); height: calc(var(--soilW) * 0.04);
     transform: translateX(-50%);
     border-radius: 50%;
-    background: radial-gradient(ellipse at 50% 26%, #bb8459 0%, #a06a41 46%, #8a5633 100%);
-    box-shadow: 0 2px 6px rgba(70,45,25,.18);
+    background: radial-gradient(ellipse at 50% 70%, rgba(58,32,16,.75) 0%, rgba(74,42,22,.55) 50%, rgba(90,52,28,0) 72%);
     pointer-events: none;
   }
 
   #plant {
     position: absolute; left: calc(50% - var(--plantH) / 2);
-    bottom: calc(var(--moundBottom) + var(--moundH) + 2px);
+    bottom: calc(var(--moundBottom) + var(--moundH) - var(--plantDepth) - 3px);
     width: var(--plantH); height: var(--plantH);
     /* 同じ段階の中でも、秒が増えるほど少しずつ背が伸びる（--grow は 0.8〜1）。
        真ん中に置くのは left で行い、transform に translate を入れない（ぽよんの scale で横にずれないように） */
@@ -145,13 +146,65 @@
     transition: transform .6s cubic-bezier(.3,1.5,.5,1);
     z-index: 2;
   }
-  /* 1秒たまるごとに、ぽよんと弾む（transform とは別の scale で重ねる） */
-  #plant.boing { animation: boing .42s ease-out; }
+  /* ふだんもゆっくり息をするように揺れる。音が聞こえたら（1秒に届く前から）大きく揺れる。
+     0.5秒たまるごとに、ぽよんと弾む（transform とは別の scale・rotate で重ねる） */
+  #plant { animation: breathe 3.2s ease-in-out infinite alternate; }
+  #plant.hear { animation: sway .46s ease-in-out infinite alternate; }
+  #plant.boing { animation: boing .42s ease-out, breathe 3.2s ease-in-out infinite alternate; }
+  #plant.hear.boing { animation: boing .42s ease-out, sway .46s ease-in-out infinite alternate; }
+  @keyframes breathe { from { rotate: -1.2deg; } to { rotate: 1.2deg; } }
+  @keyframes sway { from { rotate: -4.5deg; } to { rotate: 4.5deg; } }
   @keyframes boing {
     0% { scale: 1 1; }
-    30% { scale: 1.07 .93; }
-    60% { scale: .97 1.06; }
+    30% { scale: 1.13 .88; }
+    60% { scale: .95 1.1; }
     100% { scale: 1 1; }
+  }
+  /* 種は、音が聞こえるとぷるぷる震える（芽が出そう） */
+  #plant > .stage[data-stage="seed"] > .asset, #plant > .stage[data-stage="seed"] > .fallback { transform-origin: 50% 80%; }
+  #plant.hear > .stage[data-stage="seed"] > .asset, #plant.hear > .stage[data-stage="seed"] > .fallback { animation: jiggle .12s linear infinite alternate; }
+  @keyframes jiggle { from { rotate: -5deg; translate: -1.5% 0; } to { rotate: 5deg; translate: 1.5% -3%; } }
+  /* 音が聞こえている間、音符がふわふわ上がる */
+  #notes {
+    position: absolute; left: 50%; z-index: 3; width: 0; height: 0; pointer-events: none;
+    bottom: calc(var(--moundBottom) + var(--moundH));
+  }
+  #notes i {
+    position: absolute; left: 0; bottom: 0; font-style: normal; font-weight: 900;
+    font-size: var(--ns, 30px); line-height: 1; color: var(--nc, #ff8fb3);
+    -webkit-text-stroke: 1.5px #fff; paint-order: stroke fill;
+    text-shadow: 0 3px 0 rgba(255,255,255,.95), 0 4px 10px rgba(30,80,120,.25);
+    animation: noteUp 1.5s cubic-bezier(.25,.6,.4,1) forwards;
+  }
+  @keyframes noteUp {
+    0% { transform: translate(var(--nx0), 0) scale(.3) rotate(0deg); opacity: 0; }
+    15% { transform: translate(calc(var(--nx0) + var(--nw) * .3), -14%) scale(1.15) rotate(var(--nr)); opacity: 1; }
+    50% { transform: translate(calc(var(--nx0) - var(--nw) * .5), calc(var(--ny) * -.5)) scale(1) rotate(calc(var(--nr) * -1)); opacity: 1; }
+    100% { transform: translate(calc(var(--nx0) + var(--nw)), calc(var(--ny) * -1)) scale(.9) rotate(var(--nr)); opacity: 0; }
+  }
+  /* 水が落ちる所のしぶき */
+  #splash { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #splash.on { opacity: 1; }
+  #splash i {
+    position: absolute; left: -22px; top: -7px; width: 44px; height: 14px; border-radius: 50%;
+    border: 3px solid rgba(120,200,250,.9); opacity: 0;
+  }
+  #splash b {
+    position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%;
+    background: #8fd3fb; opacity: 0;
+  }
+  #splash.on i { animation: ripple .82s ease-out infinite; }
+  #splash.on i:nth-child(2) { animation-delay: .41s; }
+  #splash.on b { animation: hop .82s ease-out infinite; }
+  #splash.on b:nth-child(3) { --hx: -22px; }
+  #splash.on b:nth-child(4) { --hx: 4px; animation-delay: .27s; }
+  #splash.on b:nth-child(5) { --hx: 24px; animation-delay: .54s; }
+  @keyframes ripple { 0% { transform: scale(.3); opacity: .95; } 100% { transform: scale(1.5); opacity: 0; } }
+  @keyframes hop {
+    0% { transform: translate(0, 0) scale(.6); opacity: 0; }
+    15% { opacity: 1; }
+    50% { transform: translate(calc(var(--hx, 0px) * .6), -20px) scale(1); opacity: 1; }
+    100% { transform: translate(var(--hx, 0px), 2px) scale(.7); opacity: 0; }
   }
   /* 次の段階へ進んだ時、土からニョキッと伸び上がる */
   #plant > .stage.nyoki { opacity: 1; transition: none; animation: nyoki .75s cubic-bezier(.25,1.4,.5,1) both; }
@@ -165,7 +218,7 @@
   /* 伸び上がる時に根元からはじける粒 */
   #pon {
     position: absolute; left: 50%; z-index: 4; width: 0; height: 0; pointer-events: none;
-    bottom: calc(var(--moundBottom) + var(--moundH) + 6px);
+    bottom: calc(var(--moundBottom) + var(--moundH) - var(--plantDepth));
   }
   #pon i {
     position: absolute; left: 0; top: 0; width: var(--ps, 12px); height: var(--ps, 12px);
@@ -180,7 +233,10 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #plant { transition: none; }
-    #plant.boing, #plant > .stage.nyoki, #pon.go i { animation: none; }
+    #plant, #plant.hear, #plant.boing, #plant.hear.boing, #plant > .stage.nyoki, #pon.go i,
+    #plant.hear > .stage[data-stage="seed"] > .asset, #plant.hear > .stage[data-stage="seed"] > .fallback,
+    #splash.on i, #splash.on b { animation: none; }
+    #notes { display: none; }
   }
   #plant > .stage {
     position: absolute; left: 50%; bottom: 0;
@@ -192,7 +248,7 @@
   }
   #plant > .stage.show { opacity: 1; }
   /* 種は土に半分うまっている */
-  #plant > .stage[data-stage="seed"] { bottom: calc(var(--plantH) * var(--f) * -0.3); }
+  #plant > .stage[data-stage="seed"] { bottom: calc(var(--plantH) * var(--f) * -0.22); }
   #plant.pop > .stage[data-stage="flower"] { animation: flowerPop .95s cubic-bezier(.34,1.56,.64,1); }
   @keyframes flowerPop {
     0% { transform: translateX(-50%) scale(1) rotate(0deg); }
@@ -397,7 +453,7 @@
     </div>
 
     <div id="plant">
-      <div class="stage swap" data-stage="seed" style="--f:.19; --ar:3.33">
+      <div class="stage swap" data-stage="seed" style="--f:.22; --ar:3.33">
         <img class="asset" alt="" src="images/seed.png">
         <svg class="fallback" viewBox="0 0 100 30" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
           <ellipse cx="50" cy="28" rx="21" ry="5.5" fill="#5b3a20" opacity=".62"></ellipse>
@@ -462,6 +518,14 @@
       </div>
     </div>
 
+    <div id="moundFront" class="swap" aria-hidden="true">
+      <img class="asset" alt="" src="images/soil.png">
+      <div class="fallback"></div>
+    </div>
+
+    <div id="notes" aria-hidden="true"></div>
+    <div id="splash" aria-hidden="true"><i></i><i></i><b></b><b></b><b></b></div>
+
     <div id="sparkles" aria-hidden="true">
       <span class="ring"></span><span class="ring"></span><span class="ring"></span>
     </div>
@@ -513,7 +577,7 @@
 
       <div class="row">
         <div class="lab"><span>開花までの秒数</span><span class="val"><output id="bloomOut">10</output> 秒</span></div>
-        <input type="range" id="bloomIn" min="10" max="60" step="1" value="10">
+        <input type="range" id="bloomIn" min="3" max="60" step="1" value="10">
       </div>
 
       <div class="row">
@@ -938,7 +1002,7 @@
       // 前の版（初期値30秒）が残した30は、選んだ値か初期値のままか見分けられないので、新しい初期値に読み替える。
       // 今の版が保存した値（bloomV: 2 の印つき）は、30も含めてそのまま使う
       if (typeof o.bloomSec === 'number' && isFinite(o.bloomSec) && (o.bloomV === 2 || Math.round(o.bloomSec) !== 30)) {
-        cfg.bloomSec = clamp(Math.round(o.bloomSec), 10, 60);
+        cfg.bloomSec = clamp(Math.round(o.bloomSec), 3, 60);
       }
       if (typeof o.waterStartSec === 'number' && isFinite(o.waterStartSec)) cfg.waterStartSec = clamp(Math.round(o.waterStartSec * 10) / 10, 0.5, 2);
       if (typeof o.onDb === 'number' && isFinite(o.onDb)) cfg.onDb = clamp(Math.round(o.onDb), -70, -20);
@@ -969,6 +1033,7 @@
   var canWrap = $('canWrap');
   var drops = $('drops');
   var plant = $('plant');
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var sparkles = $('sparkles');
   var hintEl = $('hint');
   var barFill = $('barFill');
@@ -1057,13 +1122,13 @@
     // 同じ段階の中で、進み具合に合わせて 0.8 → 1 へ少しずつ大きくする
     var r = STAGE_RANGE[stage], g = 1;
     if (r) g = 0.8 + 0.2 * clamp((p - r[0]) / (r[1] - r[0]), 0, 1);
-    g = Math.round(g * 100) / 100;
-    if (g !== lastGrow) { lastGrow = g; plant.style.setProperty('--grow', g.toFixed(2)); }
+    g = Math.round(g * 1000) / 1000;
+    if (g !== lastGrow) { lastGrow = g; plant.style.setProperty('--grow', g.toFixed(3)); }
   }
   var lastSec = -1;
   var maxSec = 0;
   function boing(sec) {
-    // 1秒たまるごとに、ぽよんと弾む。取り消された分を取り戻した時は弾まない（その回で一番進んだ秒より先だけ）
+    // 0.5秒たまるごとに（sec は0.5秒の数）、ぽよんと弾む。取り消された分を取り戻した時は弾まない（その回で一番進んだ秒より先だけ）
     if (lastSec >= 0 && sec > lastSec && sec > maxSec) {
       plant.classList.remove('boing');
       void plant.offsetWidth;
@@ -1073,6 +1138,37 @@
     lastSec = sec;
   }
 
+  /* ---------- 音符（音が聞こえている間、見た目だけ） ---------- */
+  var notesEl = $('notes');
+  var NOTE_CH = ['\u266A\uFE0E', '\u266B\uFE0E', '\u266A\uFE0E', '\u266C\uFE0E'];
+  var NOTE_COL = ['#ff7fa8', '#ffb43b', '#4fb4ee', '#6cc04a', '#b07cf0'];
+  var nextNoteAt = 0, noteN = 0;
+  function spawnNote(t) {
+    if (t < nextNoteAt || notesEl.childElementCount > 14) return;
+    nextNoteAt = t + 230;
+    noteN++;
+    var h = (scene.clientHeight || 600);
+    var el = document.createElement('i');
+    el.textContent = NOTE_CH[noteN % NOTE_CH.length];
+    var side = (noteN % 2) ? 1 : -1;
+    var x0 = side * (20 + Math.random() * 70);
+    el.style.setProperty('--nx0', Math.round(x0) + 'px');
+    el.style.setProperty('--nw', Math.round(side * (10 + Math.random() * 40)) + 'px');
+    el.style.setProperty('--ny', Math.round(h * (0.45 + Math.random() * 0.25)) + 'px');
+    el.style.setProperty('--nr', Math.round(side * (8 + Math.random() * 14)) + 'deg');
+    el.style.setProperty('--nc', NOTE_COL[noteN % NOTE_COL.length]);
+    el.style.setProperty('--ns', Math.round(clamp(h * 0.075, 26, 60) * (0.85 + Math.random() * 0.4)) + 'px');
+    el.addEventListener('animationend', function () { if (el.parentNode) el.parentNode.removeChild(el); });
+    notesEl.appendChild(el);
+  }
+  var hearShown = false;
+  function setHear(on) {
+    if (on === hearShown) return;
+    hearShown = on;
+    plant.classList.toggle('hear', on);
+  }
+  var splash = $('splash');
+
   /* ---------- 水の落ちる距離を合わせる ---------- */
   function measureDrops() {
     var sr = scene.getBoundingClientRect();
@@ -1081,7 +1177,7 @@
     var spoutX = canWrap.offsetLeft + drops.offsetLeft;
     var spoutY = canWrap.offsetTop + drops.offsetTop;
     var targetX = (mr.left - sr.left) + mr.width * 0.45;   // 植物の根元の少し左（ジョウロは左側）
-    var targetY = (mr.top - sr.top) + 12;
+    var targetY = (mr.top - sr.top) + mr.height * 0.2;
     var dx = targetX - spoutX;
     var fall = targetY - spoutY;
     if (!isFinite(dx)) dx = -120;
@@ -1092,6 +1188,8 @@
     drops.style.setProperty('--dxh', Math.round(dx * 0.55) + 'px');
     drops.style.setProperty('--fall', Math.round(fall) + 'px');
     drops.style.setProperty('--fallh', Math.round(fall * 0.40) + 'px');
+    splash.style.left = Math.round(spoutX + dx) + 'px';
+    splash.style.top = Math.round(spoutY + fall) + 'px';
   }
   window.addEventListener('resize', measureDrops);
   // ジョウロの絵が後から読み込まれると水の出る位置が変わるので、測り直す
@@ -1148,6 +1246,7 @@
     finished = true;
     det.pause();
     hideCan();
+    setHear(false);
     celebrate(t);
     bloomLine.textContent = 'さいたね！';
     startBtn.hidden = true;
@@ -1157,6 +1256,8 @@
     finished = false;
     maxStageIdx = 0;   // 演出の「一番進んだ所」は、もういちどの時だけ戻す
     maxSec = 0;
+    notesEl.innerHTML = '';
+    ponEl.classList.remove('go');
     det.reset();
     celebrating = false;
     plant.classList.remove('pop');
@@ -1210,7 +1311,11 @@
     if (pour !== dropsOn) {
       dropsOn = pour;
       drops.classList.toggle('on', pour);
+      splash.classList.toggle('on', pour);
     }
+    // 音が聞こえたら、1秒に届く前から植物が揺れ、音符が上がる（数え方とは別の、見た目だけの反応）
+    setHear(hearing);
+    if (hearing && !reduceMotion) spawnNote(t);
 
     var wantHint = (d.state === 'tremolo' && !finished);
     if (wantHint !== hintOn) {
@@ -1228,8 +1333,10 @@
     var pct = finished ? 1 : clamp(d.total / secs, 0, 1);
     // 花は咲いた知らせ（bloom）が来てから出す。合計が開花の秒数に届いても、確定するまでの約0.9秒はつぼみのまま
     setStage(finished ? 'flower' : stageFor(Math.min(pct, 0.99)));
-    setGrow(stageShown, pct);
-    if (!finished) boing(Math.floor(Math.min(d.total, secs) + 1e-6));
+    // 背の伸びと、ぽよんは0.5秒きざみ（なめらかでなく、ぴょこっと伸びる）
+    var half = finished ? secs * 2 : Math.floor(Math.min(d.total, secs) * 2 + 1e-6);
+    setGrow(stageShown, finished ? 1 : clamp(half / 2 / secs, 0, 1));
+    if (!finished) boing(half);
 
     var p100 = Math.round(pct * 100);
     if (p100 !== lastBarPct) {
@@ -1272,7 +1379,7 @@
   }
 
   bloomIn.addEventListener('input', function () {
-    cfg.bloomSec = clamp(parseInt(bloomIn.value, 10) || BLOOM_DEFAULT, 10, 60);
+    cfg.bloomSec = clamp(parseInt(bloomIn.value, 10) || BLOOM_DEFAULT, 3, 60);
     bloomOut.textContent = String(cfg.bloomSec);
     det.setOptions({ bloomSec: cfg.bloomSec });
     saveCfg();
