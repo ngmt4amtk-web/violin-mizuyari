@@ -410,6 +410,7 @@
     #notes { display: none; }
   }
 </style>
+<script src="sfx.js"></script>
 </head>
 <body>
 <div id="app">
@@ -942,12 +943,14 @@
     if (canKey === k) hideCan();
     var n = doneCount();
     if (n >= SEEDS) finish(t);
+    else if (window.Sfx) window.Sfx.play('seed', audio.ctx);
   }
   function doneCount() { var n = 0; for (var i = 0; i < SEEDS; i++) if (plots[i].done) n++; return n; }
   function finish(t) {
     finished = true;
     det.pause();
     showAdv('');
+    if (window.Sfx) window.Sfx.play('bloom', audio.ctx);
     hideCan();
     setHint('');
     celebrating = true; celebUntil = t + CELEB_MS;
@@ -957,6 +960,7 @@
     againBtn.hidden = false;
   }
   function resetGame() {
+    if (window.Sfx) window.Sfx.stop();
     finished = false;
     det.reset();
     det.setClassifier(makeClassifier());
@@ -1240,6 +1244,7 @@
     ctx0.resume().catch(function () { /* 後で再開する */ });
     starting = true;
 
+    if (window.Sfx) window.Sfx.prepare();   // マナーモードでも効果音が鳴るように（マイクを始める前）
     navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     }).then(function (stream) {

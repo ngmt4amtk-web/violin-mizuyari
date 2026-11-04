@@ -416,6 +416,7 @@
   #micErr .t { font-weight: 800; margin-bottom: 4px; }
   #micErr .s { color: #8a4530; }
 </style>
+<script src="sfx.js"></script>
 </head>
 <body>
 <div id="app">
@@ -1257,12 +1258,14 @@
     det.pause();
     hideCan();
     setHear(false);
+    if (window.Sfx) window.Sfx.play('bloom', audio.ctx);
     celebrate(t);
     bloomLine.textContent = 'さいたね！';
     startBtn.hidden = true;
     againBtn.hidden = false;
   }
   function playAgain() {
+    if (window.Sfx) window.Sfx.stop();
     finished = false;
     maxStageIdx = 0;   // 演出の「一番進んだ所」は、もういちどの時だけ戻す
     maxSec = 0;
@@ -1499,6 +1502,7 @@
     ctx0.resume().catch(function () { /* 後で再開する */ });
     starting = true;
 
+    if (window.Sfx) window.Sfx.prepare();   // マナーモードでも効果音が鳴るように（マイクを始める前）
     navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     }).then(function (stream) {

@@ -65,6 +65,14 @@
   #speed { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .3s; overflow: hidden; }
   #speed i { position: absolute; top: -40%; width: 3px; height: 30%; border-radius: 3px; background: linear-gradient(transparent, rgba(255,255,255,.85)); animation: streak linear infinite; }
   @keyframes streak { to { transform: translateY(480%); } }
+  #speed.hyper i { width: 5px; animation-duration: .28s !important; }
+  #speed.warp i:nth-child(6n+1) { background: linear-gradient(transparent, #ff6b8a); }
+  #speed.warp i:nth-child(6n+2) { background: linear-gradient(transparent, #ffd75e); }
+  #speed.warp i:nth-child(6n+3) { background: linear-gradient(transparent, #6cf0a0); }
+  #speed.warp i:nth-child(6n+4) { background: linear-gradient(transparent, #6cc8ff); }
+  #speed.warp i:nth-child(6n+5) { background: linear-gradient(transparent, #c39bff); }
+  #speed.warp i { width: 7px; animation-duration: .2s !important; }
+  #combo small { display: block; font-size: .62em; text-align: center; color: #555; margin-top: .05em; }
 
   #world { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; transform-origin: 50% 100%; will-change: transform; z-index: 1; }
   #world.zoom { transition: transform 1.6s cubic-bezier(.3,.9,.3,1); }
@@ -182,6 +190,8 @@
   #result .a { font-size: clamp(15px, 2.6vmin, 22px); font-weight: 800; color: #3c6a50; }
   #result .h { font-size: clamp(44px, 10vmin, 92px); font-weight: 900; color: #0c4b2c; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
   #result .h small { font-size: .42em; }
+  #result .h.long { font-size: clamp(30px, 6.6vmin, 60px); }
+  #heightNum.long { font-size: clamp(28px, 6vmin, 58px); }
   #result .z { font-size: clamp(16px, 3vmin, 26px); font-weight: 900; color: #2470b8; }
   #result .b { font-size: clamp(18px, 3.4vmin, 30px); font-weight: 900; color: #2f7d4f; }
   #result .rec { margin-top: .4em; font-size: clamp(16px, 3vmin, 26px); font-weight: 900; color: #d0283a; }
@@ -221,6 +231,7 @@
     #world.zoom { transition: none; }
   }
 </style>
+<script src="sfx.js"></script>
 </head>
 <body>
 <div id="app">
@@ -668,6 +679,8 @@
     var b3 = JSON.parse(window.localStorage.getItem('wg3_best_v2') || 'null');
     if (b3 && typeof b3 === 'object') LIMITS.forEach(function (s) { if (typeof b3[s] === 'number' && isFinite(b3[s]) && b3[s] > 0) best[s] = b3[s]; });
   } catch (e) { /* 無視 */ }
+  var qlim = /[?&]lim=(20|30)(&|$)/.exec(window.location.search);   // 試験用
+  if (qlim) limit = +qlim[1];
   function saveLimit() { try { window.localStorage.setItem('wg3_cfg_v1', JSON.stringify({ limit: limit })); } catch (e) { /* 無視 */ } }
   function saveBest() { try { window.localStorage.setItem('wg3_best_v2', JSON.stringify(best)); } catch (e) { /* 無視 */ } }
 
@@ -676,10 +689,12 @@
   /* ---------- 伸び方 ----------
      「のびる力」L を貯め、高さは h = K × (e^L − 1)（m）。L が一定に増えると高さはどんどん速く増える（ぐんぐん遠くへ）。
      画面は L に比例して上がる（いつも同じ速さで景色が流れ、長い音ほど速く流れる）。
-     - 伸ばしている音（水やりと同じ決まり）: 数えた秒 × R × 速さの倍率（1本が長く続くほど上がる。最大4倍。本人「長く続くほど加速」）
+     - 伸ばしている音（水やりと同じ決まり）: 数えた秒 × R × 速さの倍率。倍率は1本の音が途切れずに続くほど上がり、上限なし
+       （本人「長く続くほど加速」「もう少し加速感あって良い。一度も止まらず行ったら太陽か宇宙飛び越える感じでも良い」）。
+       倍率 = 1 + 0.5 s + 0.0125 s²（s はその音の秒。弓を返しても途切れなければ続く）。20秒止まらずに伸ばすと太陽系の外、30秒なら宇宙の外まで届く
      - トレモロ: 1秒あたり R × 0.35（本人「トレモロでも多少伸びては良い、その代わり伸ばしてる方がより伸びる」） */
-  var K = 10, R = 0.17, TREM = 0.35, ACC = 0.5, MAXMULT = 4;
-  function multFor(stroke) { return Math.min(MAXMULT, 1 + ACC * Math.max(0, stroke)); }
+  var K = 10, R = 0.2, TREM = 0.35, LMAX = 100;   // LMAX: これ以上は伸ばさない（数が Infinity にならないように。宇宙の外より先）
+  function multFor(stroke) { var s = Math.max(0, stroke); return 1 + 0.5 * s + 0.0125 * s * s; }
   function hOf(L) { return K * (Math.exp(L) - 1); }
   function LOf(h) { return Math.log(1 + h / K); }
 
@@ -718,13 +733,21 @@
     { m: 2e7, img: 'star', e: '⭐', x: 76, w: 0.8, spin: 1 },
     { m: 3.84e8, img: 'moon', e: '\u{1F315}', n: 'おつきさま', big: 1, x: 68, w: 3.0 },
     { m: 3e9, img: 'star', e: '⭐', x: 26, w: 0.7, spin: 1 },
-    { m: 1.2e12, img: 'saturn', e: '\u{1FA90}', n: 'どせい', big: 1, x: 34, w: 3.2 }
+    { m: 1.5e11, img: 'sun', e: '\u2600\uFE0F', n: 'たいよう！', big: 1, x: 70, w: 3.6, spin: 1 },
+    { m: 7.8e11, img: 'jupiter', e: '\u{1FA90}', n: 'もくせい', x: 28, w: 2.8 },
+    { m: 1.4e12, img: 'saturn', e: '\u{1FA90}', n: 'どせい', x: 72, w: 3.2 },
+    { m: 1e13, img: 'comet', e: '\u2604\uFE0F', n: 'たいようけいの そと！', big: 1, x: 30, w: 1.8, fly: 1, dur: 4 },
+    { m: 1e15, img: 'nebula', e: '\u{1F30C}', n: 'せいうん', x: 70, w: 3.4 },
+    { m: 1e17, img: 'blackhole', e: '\u{1F573}\uFE0F', n: 'ブラックホール', x: 28, w: 2.8, spin: 1 },
+    { m: 1e20, img: 'galaxy', e: '\u{1F30C}', n: 'ぎんがを とびこえた！', big: 1, x: 66, w: 4.4 },
+    { m: 1e23, img: 'galaxy', e: '\u{1F30C}', x: 30, w: 2.6 },
+    { m: 1e26, img: 'nebula', e: '\u2728', n: 'うちゅうの はて！', big: 1, x: 50, w: 5 }
   ];
   // 高さの区切りの名前（上の真ん中に小さく出す）
-  var ZONES = [[0, 'にわ'], [12, 'そら'], [120, 'くもの たかさ'], [2000, 'たかい そら'], [12000, 'そらの いちばん うえ'], [100000, 'うちゅう'], [3e8, 'つきの ちかく'], [1e9, 'とおい うちゅう']];
+  var ZONES = [[0, 'にわ'], [12, 'そら'], [120, 'くもの たかさ'], [2000, 'たかい そら'], [12000, 'そらの いちばん うえ'], [100000, 'うちゅう'], [3e8, 'つきの ちかく'], [1e9, 'とおい うちゅう'], [1.2e11, 'たいようの ちかく'], [1e13, 'たいようけいの そと'], [1e19, 'ぎんがの そと'], [1e26, 'うちゅうの はて'], [1e27, 'うちゅうの そと']];
   function zoneAt(h) { var z = ZONES[0][1]; for (var i = 0; i < ZONES.length; i++) if (h >= ZONES[i][0]) z = ZONES[i][1]; return z; }
   // 空の色（高さ m → 色）
-  var SKY = [[0, [142, 216, 255]], [500, [110, 196, 250]], [5000, [70, 140, 222]], [30000, [34, 64, 150]], [100000, [10, 16, 50]], [1e12, [4, 6, 24]]];
+  var SKY = [[0, [142, 216, 255]], [500, [110, 196, 250]], [5000, [70, 140, 222]], [30000, [34, 64, 150]], [100000, [10, 16, 50]], [1e12, [6, 8, 30]], [1e16, [22, 8, 48]], [1e21, [34, 6, 58]], [1e27, [2, 0, 8]]];
   function skyAt(h) {
     var x = LOf(h);
     for (var i = 1; i < SKY.length; i++) {
@@ -740,9 +763,12 @@
     var km = h / 1000;
     if (km < 10) return { n: km.toFixed(1), u: 'km' };
     if (km < 10000) return { n: Math.floor(km).toLocaleString('ja-JP'), u: 'km' };
-    var man = km / 10000;
-    if (man < 10000) return { n: (man < 100 ? man.toFixed(1) : Math.floor(man).toLocaleString('ja-JP')) + 'まん', u: 'km' };
-    return { n: (man / 10000).toFixed(1) + 'おく', u: 'km' };
+    if (h >= 1e27) return { n: '\u221E', u: 'むげん' };   // 宇宙の外は、はかれない
+    var units = [[1e4, 'まん'], [1e8, 'おく'], [1e12, 'ちょう'], [1e16, 'けい'], [1e20, 'がい']];
+    for (var i = units.length - 1; i >= 0; i--) {
+      var v = km / units[i][0];
+      if (v >= 1 || i === 0) return { n: (v < 100 ? v.toFixed(1) : Math.floor(v).toLocaleString('ja-JP')) + units[i][1], u: 'km' };
+    }
   }
 
   /* ---------- 画面の部品 ---------- */
@@ -751,7 +777,7 @@
   var toast = $('toast'), hint = $('hint'), result = $('result'), mainBtn = $('mainBtn'), pills = $('pills');
   var timerEl = $('timer'), timerNum = $('timerNum'), heightNum = $('heightNum'), heightBox = $('heightBox'), bestNum = $('bestNum'), zoneEl = $('zone');
   var stars = $('stars'), confetti = $('confetti'), earth = $('earth');
-  (function () { for (var i = 0; i < 14; i++) { var s = document.createElement('i'); s.style.left = (4 + (i * 53) % 92) + '%'; s.style.animationDuration = (0.5 + (i % 4) * 0.12) + 's'; s.style.animationDelay = (-(i % 5) * 0.13) + 's'; speedEl.appendChild(s); } })();
+  (function () { for (var i = 0; i < 22; i++) { var s = document.createElement('i'); s.style.left = (4 + (i * 53) % 92) + '%'; s.style.animationDuration = (0.5 + (i % 4) * 0.12) + 's'; s.style.animationDelay = (-(i % 5) * 0.13) + 's'; speedEl.appendChild(s); } })();
 
   var G = {};
   function layout() {
@@ -780,7 +806,7 @@
   var DECO = (function () {
     var a = [], i = 0, x;
     for (x = LOf(70); x < LOf(9000); x += 0.42, i++) a.push({ m: hOf(x), img: ['cloud1', 'cloud2', 'cloud3'][i % 3], e: '\u2601\uFE0F', x: i % 2 ? 14 + (i * 7) % 18 : 70 + (i * 11) % 18, w: 1.4 + (i % 3) * 0.6, front: i % 4 === 1 });
-    for (x = LOf(60000), i = 0; x < LOf(5e12); x += 0.55, i++) a.push({ m: hOf(x), img: 'star', e: '\u2B50', x: i % 2 ? 12 + (i * 13) % 26 : 64 + (i * 17) % 26, w: 0.35 + (i % 3) * 0.15, spin: 1 });
+    for (x = LOf(60000), i = 0; x < LOf(1e28); x += 0.55, i++) a.push({ m: hOf(x), img: 'star', e: '\u2B50', x: i % 2 ? 12 + (i * 13) % 26 : 64 + (i * 17) % 26, w: 0.35 + (i % 3) * 0.15, spin: 1 });
     return a;
   })();
   var objEls = [];
@@ -884,13 +910,13 @@
       earth.style.transform = 'translateX(-50%) scale(' + (1 - 0.55 * far).toFixed(3) + ')';
     }
     var f = fmt(h), ht = f.n + '|' + f.u;
-    if (ht !== lastHtxt) { lastHtxt = ht; heightNum.innerHTML = f.n + '<small>' + f.u + '</small>'; }
+    if (ht !== lastHtxt) { lastHtxt = ht; heightNum.innerHTML = f.n + '<small>' + f.u + '</small>'; heightNum.classList.toggle('long', f.n.length > 6); }
     var z = zoneAt(h);
     if (z !== lastZone) { lastZone = z; zoneEl.textContent = z; }
     drawRuler(force);
   }
   // 右の端の目盛り: 1・2・5 × 10の何乗 m のきりのいい高さ
-  var NICE = (function () { var a = []; for (var p = 0; p <= 12; p++) [1, 2, 5].forEach(function (k) { a.push(k * Math.pow(10, p)); }); return a; })();
+  var NICE = (function () { var a = []; for (var p = 0; p <= 27; p++) [1, 2, 5].forEach(function (k) { a.push(k * Math.pow(10, p)); }); return a; })();
   function drawRuler(force) {
     var key = Math.round(camY / 2) + ':' + G.H;
     if (!force && key === lastRulerKey) return;
@@ -931,12 +957,14 @@
       if (d.total > credited) {
         var add = d.total - credited; credited = d.total;
         // 増えた分の真ん中の時点の倍率を使う（画面のコマの速さで結果が変わらないように）
-        mult = d.state === 'watering' ? multFor(d.stroke - add / 2) : 1;
+        // 制限時間より長い音はありえないので、倍率に使う音の秒は制限時間までにする（裏にいた間にまとめて進んだ時のため）
+        mult = d.state === 'watering' ? multFor(Math.min(d.stroke - add / 2, limit)) : 1;
         L += add * R * mult * frac;
       } else if (d.total < credited) {
         credited = d.total;   // トレモロで取り消された分（伸びは戻さない。次に増えた分から数える）
       }
       if (trem) L += adt * R * TREM * frac;
+      L = Math.min(L, LMAX);
       var left = Math.max(0, limit - elapsed);
       timerNum.textContent = String(Math.ceil(left - 1e-6));
       timerEl.style.setProperty('--left', (left / limit).toFixed(3));
@@ -948,21 +976,28 @@
 
     // 伸びる速さの表示と、速い時の流れる線
     var cm = (phase === 'play' && d.state === 'watering') ? multFor(d.stroke) : 1;
-    var ctext = '';
-    if (cm >= 3.5) ctext = 'びゅーん ×' + cm.toFixed(1);
-    else if (cm >= 2.5) ctext = 'もりもり ×' + cm.toFixed(1);
-    else if (cm >= 1.5) ctext = 'ぐんぐん ×' + cm.toFixed(1);
+    var ctext = '', mx = '\u00D7' + (cm < 10 ? cm.toFixed(1) : Math.round(cm));
+    if (cm >= 10) ctext = 'ワープ！ ' + mx;
+    else if (cm >= 6) ctext = 'ちょうとっきゅう ' + mx;
+    else if (cm >= 3.5) ctext = 'びゅーん ' + mx;
+    else if (cm >= 2.5) ctext = 'もりもり ' + mx;
+    else if (cm >= 1.5) ctext = 'ぐんぐん ' + mx;
+    var nonstop = (phase === 'play' && d.state === 'watering' && d.stroke >= 5) ? Math.floor(d.stroke) : 0;
+    if (ctext && nonstop) ctext += '|' + nonstop;
     if (ctext !== lastCombo) {
       var lvChanged = ctext.slice(0, 3) !== lastCombo.slice(0, 3);
       lastCombo = ctext;
       combo.classList.toggle('on', !!ctext);
       if (ctext) {
-        combo.textContent = ctext;
-        combo.style.setProperty('--cc', cm >= 3.5 ? '#d0283a' : cm >= 2.5 ? '#e07a00' : '#2f9e5f');
+        var parts = ctext.split('|');
+        combo.innerHTML = parts[0] + (parts[1] ? '<small>ノンストップ ' + parts[1] + 'びょう</small>' : '');
+        combo.style.setProperty('--cc', cm >= 10 ? '#8a3ffc' : cm >= 6 ? '#e0287a' : cm >= 3.5 ? '#d0283a' : cm >= 2.5 ? '#e07a00' : '#2f9e5f');
         if (lvChanged && !reduceMotion) { combo.classList.remove('bump'); void combo.offsetWidth; combo.classList.add('bump'); }
       }
     }
-    speedEl.style.opacity = cm >= 2 ? String(clamp((cm - 2) / 2, 0.25, 0.9)) : '0';
+    speedEl.style.opacity = cm >= 2 ? String(clamp((cm - 2) / 2, 0.25, 0.95)) : '0';
+    speedEl.classList.toggle('hyper', cm >= 6);
+    speedEl.classList.toggle('warp', cm >= 10);
 
     if (hearing !== hearShown) { hearShown = hearing; tip.classList.toggle('hear', hearing); seed.classList.toggle('hear', hearing); }
     if (phase === 'ready') setHint('ひいたら スタート！');
@@ -1006,13 +1041,16 @@
     var prev = best[limit] || 0, rec = $('rRec'), f = fmt(h);
     $('rLimit').textContent = String(limit);
     $('rH').innerHTML = f.n + '<small>' + f.u + '</small>';
+    $('rH').classList.toggle('long', f.n.length > 5);
     $('rZ').textContent = lastReached ? lastReached.replace('！', '') + 'まで とどいた！' : '';
     if (h > prev && h >= 0.1) {
       best[limit] = h; saveBest();
       var pf = fmt(prev);
       rec.className = 'rec'; rec.textContent = prev > 0 ? 'さいこう きろく！（まえは ' + pf.n + pf.u + '）' : 'さいこう きろく！';
       throwConfetti();
+      if (window.Sfx) window.Sfx.play('record', audio.ctx);
     } else {
+      if (window.Sfx) window.Sfx.play('bloom', audio.ctx);
       var bf = fmt(prev);
       rec.className = 'rec old'; rec.textContent = prev > 0 ? 'さいこうは ' + bf.n + bf.u : '';
     }
@@ -1027,6 +1065,7 @@
     setPills();
   }
   function resetGame() {
+    if (window.Sfx) window.Sfx.stop();
     phase = 'ready'; L = 0; det.reset(); credited = 0; elapsed = 0; lastMeterIdx = 0; passedFlags = []; lastReached = '';
     objEls.forEach(function (el) { el.classList.remove('passed'); });
     notesEl.innerHTML = ''; confetti.innerHTML = '';
@@ -1084,6 +1123,7 @@
     var ctx0 = new AC();
     ctx0.resume().catch(function () {});
     starting = true; syncBtn();
+    if (window.Sfx) window.Sfx.prepare();   // マナーモードでも効果音が鳴るように（マイクを始める前）
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).then(function (stream) {
       starting = false;
       audio.stream = stream; audio.ctx = ctx0;
