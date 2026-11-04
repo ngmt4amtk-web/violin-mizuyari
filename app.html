@@ -161,9 +161,11 @@
   }
 
   /* ---------- ジョウロ ---------- */
+  /* 植物の左に置き、注ぎ口（右下）を植物へ向ける。
+     音が聞こえたら立ったまま出て（.on）、水が出る時に傾ける（.pour） */
   #canWrap {
     position: absolute;
-    left: calc(50% + var(--soilW) * 0.18);
+    left: calc(50% - var(--soilW) * 0.18 - var(--canW));
     bottom: calc(var(--moundBottom) + var(--moundH) + var(--plantH) * 0.50);
     width: var(--canW); height: var(--canH);
     z-index: 4; opacity: 0;
@@ -173,7 +175,7 @@
   }
   #canWrap.on { opacity: 1; transform: translateY(0) scale(1); }
   #canBox { width: 100%; height: 100%; transform-origin: 60% 25%; transform: rotate(0deg); transition: transform .45s cubic-bezier(.3,1.1,.5,1); }
-  #canWrap.on #canBox { transform: rotate(24deg); }
+  #canWrap.pour #canBox { transform: rotate(24deg); }
 
   /* ---------- 水の粒 ---------- */
   #drops { position: absolute; left: 75.8%; top: 78.7%; width: 0; height: 0; z-index: 5; pointer-events: none; --fall: 150px; --fallh: 60px; --dx: -100px; --dxh: -55px; }
@@ -326,7 +328,7 @@
       <div></div>
       <div id="barTrack">
         <div id="barFill"></div>
-        <div id="barText">0 / 30 びょう</div>
+        <div id="barText">0 / 10 びょう</div>
       </div>
       <div id="waterLine">みずやり 0 かい</div>
     </div>
@@ -456,8 +458,8 @@
       <h2>せってい（おとなのひと）</h2>
 
       <div class="row">
-        <div class="lab"><span>開花までの秒数</span><span class="val"><output id="bloomOut">30</output> 秒</span></div>
-        <input type="range" id="bloomIn" min="10" max="60" step="1" value="30">
+        <div class="lab"><span>開花までの秒数</span><span class="val"><output id="bloomOut">10</output> 秒</span></div>
+        <input type="range" id="bloomIn" min="10" max="60" step="1" value="10">
       </div>
 
       <div class="row">
@@ -869,7 +871,9 @@
   var CELEB_MS = 3000;
   var DIP_SCALE = { 4: 'きびしめ', 6: 'ふつう', 9: 'ゆるめ' };
 
-  var cfg = { bloomSec: 30, waterStartSec: 1.0, onDb: -45, tremoloDipDb: 6 };
+  // 開花の秒数の初期値は10秒（本人 2026-11-04「デフォ10秒で良いや」）。30秒などは設定で選べる
+  var BLOOM_DEFAULT = 10;
+  var cfg = { bloomSec: BLOOM_DEFAULT, waterStartSec: 1.0, onDb: -45, tremoloDipDb: 6 };
 
   function readCfg() {
     try {
@@ -877,7 +881,11 @@
       if (!raw) return;
       var o = JSON.parse(raw);
       if (!o || typeof o !== 'object') return;
-      if (typeof o.bloomSec === 'number' && isFinite(o.bloomSec)) cfg.bloomSec = clamp(Math.round(o.bloomSec), 10, 60);
+      // 前の版（初期値30秒）が残した30は、選んだ値か初期値のままか見分けられないので、新しい初期値に読み替える。
+      // 今の版が保存した値（bloomV: 2 の印つき）は、30も含めてそのまま使う
+      if (typeof o.bloomSec === 'number' && isFinite(o.bloomSec) && (o.bloomV === 2 || Math.round(o.bloomSec) !== 30)) {
+        cfg.bloomSec = clamp(Math.round(o.bloomSec), 10, 60);
+      }
       if (typeof o.waterStartSec === 'number' && isFinite(o.waterStartSec)) cfg.waterStartSec = clamp(Math.round(o.waterStartSec * 10) / 10, 0.5, 2);
       if (typeof o.onDb === 'number' && isFinite(o.onDb)) cfg.onDb = clamp(Math.round(o.onDb), -70, -20);
       if (typeof o.tremoloDipDb === 'number' && isFinite(o.tremoloDipDb)) cfg.tremoloDipDb = clamp(o.tremoloDipDb, 4, 9);
@@ -887,6 +895,7 @@
     try {
       window.localStorage.setItem(CFG_KEY, JSON.stringify({
         bloomSec: cfg.bloomSec,
+        bloomV: 2,
         waterStartSec: cfg.waterStartSec,
         onDb: cfg.onDb,
         tremoloDipDb: cfg.tremoloDipDb
@@ -925,8 +934,9 @@
   var stageEls = Array.prototype.slice.call(document.querySelectorAll('#plant > .stage'));
 
   /* ---------- いまの状態 ---------- */
-  var canVisible = false;
-  var pourAt = -1;
+  var canVisible = false;   // ジョウロが出ている（立っている）
+  var canPouring = false;   // ジョウロを傾けて水を出している
+  var pourAt = Infinity;
   var dropsOn = false;
   var hintOn = false;
   var celebrating = false;
@@ -975,13 +985,13 @@
     var mr = mound.getBoundingClientRect();
     var spoutX = canWrap.offsetLeft + (canWrap.offsetWidth || 0) * 0.758;
     var spoutY = canWrap.offsetTop + (canWrap.offsetHeight || 0) * 0.787;
-    var targetX = (mr.left - sr.left) + mr.width * 0.66;
+    var targetX = (mr.left - sr.left) + mr.width * 0.45;   // 植物の根元の少し左（ジョウロは左側）
     var targetY = (mr.top - sr.top) + 12;
     var dx = targetX - spoutX;
     var fall = targetY - spoutY;
     if (!isFinite(dx)) dx = -120;
     if (!isFinite(fall)) fall = 160;
-    dx = clamp(dx, -520, 40);
+    dx = clamp(dx, -520, 520);
     fall = clamp(fall, 40, 520);
     drops.style.setProperty('--dx', Math.round(dx) + 'px');
     drops.style.setProperty('--dxh', Math.round(dx * 0.55) + 'px');
@@ -992,17 +1002,34 @@
   window.addEventListener('orientationchange', function () { setTimeout(measureDrops, 250); });
 
   /* ---------- ジョウロ ---------- */
-  var canShownAt = 0;
-  var CAN_MIN_MS = 1500;   // 一度出たジョウロは、音が止まっても1.5秒は水をかけて見せる
+  // 音が聞こえたら（判定器が rising か watering）ジョウロを立てたまま出す。
+  // 音が「水が出るまでの秒数」続いたら（water の知らせ）傾けて水を出す。数え方は判定器のまま変えない
+  var pourShownAt = 0;
+  var heardAt = 0;
+  var CAN_MIN_MS = 1500;    // 一度水を出したら、音が止まっても1.5秒は水をかけて見せる
+  var READY_HOLD_MS = 600;  // 水の前に音が止まっても、0.6秒は出したまま（短い音の連続でちらつかせない）
   function showCan(t) {
-    canShownAt = t;
+    heardAt = t;
     if (canVisible) return;
     canVisible = true;
-    pourAt = t + 250;
     canWrap.classList.add('on');
     measureDrops();
   }
+  function startPour(t) {
+    showCan(t);
+    pourShownAt = t;
+    if (canPouring) return;
+    canPouring = true;
+    pourAt = t + 250;
+    canWrap.classList.add('pour');
+  }
+  function stopPour() {
+    canPouring = false;
+    pourAt = Infinity;
+    canWrap.classList.remove('pour');
+  }
   function hideCan() {
+    stopPour();
     canVisible = false;
     canWrap.classList.remove('on');
   }
@@ -1058,16 +1085,29 @@
     var evs = d.takeEvents();
     for (var i = 0; i < evs.length; i++) {
       if (finished) break;   // 咲いた後の知らせは使わない（ジョウロを出し直さない）
-      if (evs[i] === 'water') showCan(t);
+      if (evs[i] === 'water') startPour(t);
       else if (evs[i] === 'bloom') finish(t);
     }
 
     // 咲いたかは判定器の回数からも拾う（画面が止まっていて知らせが溢れた時の取りこぼし対策）
     if (!finished && d.blooms > 0) finish(t);
 
-    if (canVisible && (d.state === 'tremolo' || (d.state !== 'watering' && t >= canShownAt + CAN_MIN_MS))) hideCan();
+    // 音が聞こえている間はジョウロを出す（トレモロの間は出さない）
+    var hearing = !finished && (d.state === 'rising' || d.state === 'watering');
+    if (hearing) showCan(t);
+    if (d.state === 'tremolo') {
+      if (canVisible) hideCan();
+    } else {
+      if (canPouring && d.state !== 'watering') {
+        // 次の音が始まり、まだ水の秒数に届いていない: すぐ水を止め、立てて待つ
+        if (d.state === 'rising' && !d.qualified) stopPour();
+        // 音が止まった: 1.5秒は水をかけて見せてから下げる
+        else if (!hearing && t >= pourShownAt + CAN_MIN_MS) hideCan();
+      }
+      if (canVisible && !canPouring && !hearing && t >= heardAt + READY_HOLD_MS) hideCan();
+    }
 
-    var pour = canVisible && d.state !== 'tremolo' && t >= pourAt;
+    var pour = canPouring && d.state !== 'tremolo' && t >= pourAt;
     if (pour !== dropsOn) {
       dropsOn = pour;
       drops.classList.toggle('on', pour);
@@ -1085,9 +1125,9 @@
       sparkles.classList.remove('go');
     }
 
-    var secs = d.opt.bloomSec > 0 ? d.opt.bloomSec : 30;
+    var secs = d.opt.bloomSec > 0 ? d.opt.bloomSec : BLOOM_DEFAULT;
     var pct = finished ? 1 : clamp(d.total / secs, 0, 1);
-    // 花は咲いた知らせ（bloom）が来てから出す。合計が30秒に届いても、確定するまでの約0.9秒はつぼみのまま
+    // 花は咲いた知らせ（bloom）が来てから出す。合計が開花の秒数に届いても、確定するまでの約0.9秒はつぼみのまま
     setStage(finished ? 'flower' : stageFor(Math.min(pct, 0.99)));
 
     var p100 = Math.round(pct * 100);
@@ -1131,7 +1171,7 @@
   }
 
   bloomIn.addEventListener('input', function () {
-    cfg.bloomSec = clamp(parseInt(bloomIn.value, 10) || 30, 10, 60);
+    cfg.bloomSec = clamp(parseInt(bloomIn.value, 10) || BLOOM_DEFAULT, 10, 60);
     bloomOut.textContent = String(cfg.bloomSec);
     det.setOptions({ bloomSec: cfg.bloomSec });
     saveCfg();
@@ -1318,6 +1358,8 @@
         waters: det.waters,
         env: det.env,
         canVisible: canVisible,
+        canPouring: canPouring,
+        dropsOn: dropsOn,
         finished: finished,
         button: startBtn.textContent + (startBtn.disabled ? '(押せない)' : '(押せる)'),
         stage: stageShown
