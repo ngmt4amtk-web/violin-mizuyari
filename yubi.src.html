@@ -739,7 +739,7 @@
   document.documentElement.style.setProperty('--n', String(SEEDS));
   $('seedN').textContent = String(SEEDS);
   if (LEVEL === 2) pickBtn.textContent = 'えらびなおす';
-  document.title = 'レベル' + LEVEL + ' ゆびのタネ';
+  document.title = 'レベル' + (LEVEL + 1) + ' ゆびのタネ';   // ?lv= は保存済みのリンクのため据え置き。画面の番号は1つ上（レベル2は開放弦）
   function relabel() {
     for (var i = 0; i < plots.length; i++) plots[i].tag.querySelector('b').textContent = String(FINGERS[i]);
   }

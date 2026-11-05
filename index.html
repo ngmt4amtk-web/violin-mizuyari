@@ -39,6 +39,10 @@
   .lv .n { font-size: clamp(16px, 2.8vmin, 22px); font-weight: 800; color: #2f7d4f; }
   .lv .t { font-size: clamp(26px, 5.4vmin, 46px); font-weight: 900; color: #0c4b2c; line-height: 1.1; }
   .lv .d { font-size: clamp(14px, 2.3vmin, 19px); font-weight: 700; color: #3c6a50; text-align: center; line-height: 1.5; }
+  .lv .t { white-space: nowrap; }
+  .lv .t.long { font-size: clamp(22px, 4.4vmin, 34px); line-height: 1.5; }
+  /* 7枠が1画面に入るよう、広い画面は4列にする */
+  @media (min-width: 1000px) { .levels { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(1120px, 100%); } }
   .dots { display: flex; gap: 6px; margin-top: 4px; }
   .dots i { width: 16px; height: 16px; border-radius: 50%; display: block; }
 </style>
@@ -51,26 +55,32 @@
       <span class="t">のばす</span>
       <span class="d">音を のばして<br>はなを 1つ さかせよう</span>
     </a>
-    <a class="lv" href="yubi.html?lv=2">
+    <a class="lv" href="kaihou.html">
       <span class="n">レベル 2</span>
+      <span class="t long">かいほうげん</span>
+      <span class="d">ソ・レ・ラ・ミの タネを<br>ぜんぶ さかせよう</span>
+      <span class="dots" aria-hidden="true"><i style="background:#1F5FD1"></i><i style="background:#EE8A00"></i><i style="background:#CC1030"></i><i style="background:#138A3A"></i></span>
+    </a>
+    <a class="lv" href="yubi.html?lv=2">
+      <span class="n">レベル 3</span>
       <span class="t">ゆび 1つ</span>
       <span class="d">げんと ゆび（0・1・2）を えらんで<br>タネを 1つ さかせよう</span>
       <span class="dots" aria-hidden="true"><i style="background:#1F5FD1"></i><i style="background:#EE8A00"></i><i style="background:#CC1030"></i><i style="background:#138A3A"></i></span>
     </a>
     <a class="lv" href="yubi.html?lv=3">
-      <span class="n">レベル 3</span>
+      <span class="n">レベル 4</span>
       <span class="t">ゆび 0〜2</span>
       <span class="d">0・1・2の タネを<br>ぜんぶ さかせよう</span>
       <span class="dots" aria-hidden="true"><i style="background:#1F5FD1"></i><i style="background:#EE8A00"></i><i style="background:#CC1030"></i><i style="background:#138A3A"></i></span>
     </a>
     <a class="lv" href="yubi.html?lv=4">
-      <span class="n">レベル 4</span>
+      <span class="n">レベル 5</span>
       <span class="t">ゆび 0〜3</span>
       <span class="d">0〜3の タネを<br>ぜんぶ さかせよう</span>
       <span class="dots" aria-hidden="true"><i style="background:#1F5FD1"></i><i style="background:#EE8A00"></i><i style="background:#CC1030"></i><i style="background:#138A3A"></i></span>
     </a>
     <a class="lv" href="yubi.html?lv=5">
-      <span class="n">レベル 5</span>
+      <span class="n">レベル 6</span>
       <span class="t">ゆび 0〜4</span>
       <span class="d">0〜4の タネを<br>ぜんぶ さかせよう</span>
       <span class="dots" aria-hidden="true"><i style="background:#1F5FD1"></i><i style="background:#EE8A00"></i><i style="background:#CC1030"></i><i style="background:#138A3A"></i></span>
