@@ -179,6 +179,18 @@
   }
   #hint.show { opacity: 1; }
 
+  #count { position: absolute; z-index: 13; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
+  #count.show { display: flex; background: radial-gradient(circle, rgba(0,0,0,.28) 0%, rgba(0,0,0,.12) 60%, rgba(0,0,0,0) 100%); }
+  #count b { font-weight: 900; line-height: 1; font-size: min(100vw, 70vh); color: var(--cc,#d0283a); -webkit-text-stroke: clamp(5px,1.4vmin,12px) #fff; paint-order: stroke fill; text-shadow: 0 6px 0 rgba(255,255,255,.9), 0 12px 30px rgba(0,0,0,.35); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #count b.go { font-size: min(17.5vw, 40vh); }
+  #count b.pop { animation: countPop .9s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes countPop {
+    0% { opacity: 0; transform: scale(1.7); }
+    18% { opacity: 1; transform: scale(1); }
+    80% { opacity: 1; transform: scale(.98); }
+    100% { opacity: .55; transform: scale(.92); }
+  }
+
   #result {
     position: absolute; z-index: 11; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.6);
     width: min(460px, calc(100% - 32px)); padding: clamp(14px, 3vmin, 26px) 16px;
@@ -224,7 +236,7 @@
   #micErr .t { font-weight: 800; margin-bottom: 4px; }
 
   @media (prefers-reduced-motion: reduce) {
-    #tip, #tip.hear, #tip.pop svg, #seed.hear img, .obj .pic, .obj.passed .pic, #combo.bump, #toast.go, #heightNum.bump, .flap img { animation: none !important; }
+    #tip, #tip.hear, #tip.pop svg, #seed.hear img, .obj .pic, .obj.passed .pic, #combo.bump, #toast.go, #heightNum.bump, .flap img, #count b.pop { animation: none !important; }
     .flap img.b { opacity: 0; }
     #toast.go { opacity: 1; transform: translate(-50%, 0); }
     #notes, #confetti, #speed { display: none; }
@@ -283,6 +295,7 @@
     <button id="mainBtn" type="button">はじめる</button>
   </footer>
 
+  <div id="count" aria-hidden="true"></div>
   <div id="micErr"><div class="t" id="micErrTitle"></div><div id="micErrSub"></div></div>
 </div>
 
@@ -775,6 +788,7 @@
   var app = $('app'), scene = $('scene'), world = $('world'), vine = $('vine'), tip = $('tip'), seed = $('seed');
   var objsEl = $('objs'), ruler = $('ruler'), notesEl = $('notes'), combo = $('combo'), speedEl = $('speed');
   var toast = $('toast'), hint = $('hint'), result = $('result'), mainBtn = $('mainBtn'), pills = $('pills');
+  var countEl = $('count');
   var timerEl = $('timer'), timerNum = $('timerNum'), heightNum = $('heightNum'), heightBox = $('heightBox'), bestNum = $('bestNum'), zoneEl = $('zone');
   var stars = $('stars'), confetti = $('confetti'), earth = $('earth');
   (function () { for (var i = 0; i < 22; i++) { var s = document.createElement('i'); s.style.left = (4 + (i * 53) % 92) + '%'; s.style.animationDuration = (0.5 + (i % 4) * 0.12) + 's'; s.style.animationDelay = (-(i % 5) * 0.13) + 's'; speedEl.appendChild(s); } })();
@@ -834,7 +848,12 @@
   }
 
   /* ---------- 状態 ---------- */
-  var phase = 'ready';      // ready（最初の音を待つ）| play | done
+  var phase = 'ready';      // ready（スタート待ち）| count（3・2・1）| play | done
+  var wantCount = false;    // スタートを頼まれている
+  var goAt = 0;             // 高い音が鳴る AudioContext の時刻
+  var countShown = 0;       // 今出している数字（3・2・1。出していなければ 0）
+  var countHideAt = 0;      // 「スタート！」を消す時刻（0 なら消す予定なし）
+  var muteUntil = 0;        // この時刻まで、マイクの音を判定器へ渡さない
   var L = 0;                // のびる力
   var credited = 0;         // 判定器の合計秒数のうち、伸びにした分
   var elapsed = 0, camY = 0, lastNow = 0, lastDet = null;
@@ -844,12 +863,12 @@
 
   function setPills() {
     var bs = pills.querySelectorAll('button');
-    for (var i = 0; i < bs.length; i++) { var s = +bs[i].getAttribute('data-s'); bs[i].classList.toggle('on', s === limit); bs[i].disabled = phase === 'play'; }
+    for (var i = 0; i < bs.length; i++) { var s = +bs[i].getAttribute('data-s'); bs[i].classList.toggle('on', s === limit); bs[i].disabled = phase === 'play' || phase === 'count'; }
     if (best[limit]) { var f = fmt(best[limit]); bestNum.textContent = f.n + f.u; } else bestNum.textContent = '-';
     if (phase === 'ready') { timerNum.textContent = String(limit); timerEl.style.setProperty('--left', '1'); timerEl.classList.remove('hurry'); }
   }
   pills.addEventListener('click', function (e) {
-    var b = e.target.closest('button'); if (!b || phase === 'play') return;
+    var b = e.target.closest('button'); if (!b || phase === 'play' || phase === 'count') return;
     limit = +b.getAttribute('data-s'); saveLimit();
     if (phase === 'done') resetGame(); else setPills();
   });
@@ -858,6 +877,50 @@
     toast.classList.remove('go'); void toast.offsetWidth; toast.classList.add('go');
   }
   function setHint(txt) { if (hint.textContent !== (txt || '')) hint.textContent = txt || ''; hint.classList.toggle('show', !!txt); }
+
+  /* ---------- スタートのカウント（3・2・1・スタート！） ---------- */
+  function showCount(txt, color, isGo) {
+    countEl.innerHTML = '<b' + (isGo ? ' class="go"' : '') + ' style="--cc:' + color + '">' + txt + '</b>';
+    countEl.classList.add('show');
+    var b = countEl.firstChild; void b.offsetWidth; b.classList.add('pop');
+  }
+  function hideCount() { countEl.classList.remove('show'); countEl.innerHTML = ''; countShown = 0; countHideAt = 0; }
+  function beginCount() {
+    var c = audio.ctx;
+    wantCount = false;
+    if (window.Sfx) window.Sfx.stop();
+    phase = 'count';
+    goAt = c.currentTime + 3.12;           // 最初の音は 0.12 秒後、高い音はその 3 秒後
+    if (window.Sfx && window.Sfx.countdown) window.Sfx.countdown(c, goAt - 3);
+    setPills(); setHint(''); syncBtn();
+  }
+  function cancelCount() {
+    if (window.Sfx) window.Sfx.stop();
+    hideCount();
+    phase = 'ready'; muteUntil = 0;
+    setPills(); syncBtn();
+  }
+  // 毎コマ呼ぶ。スタートの瞬間に true を返す
+  var COUNT_COLORS = { 3: '#d0283a', 2: '#e07a00', 1: '#e0a800' };
+  function stepCount() {
+    var c = audio.ctx;
+    if (!c || c.state !== 'running') { cancelCount(); return false; }
+    var r = goAt - c.currentTime;
+    if (r > 0) {
+      var n = Math.min(3, Math.ceil(r));
+      if (n !== countShown) { countShown = n; showCount(String(n), COUNT_COLORS[n], false); }
+      return false;
+    }
+    phase = 'play'; elapsed = 0; L = 0;
+    det.reset(); lastNow = det.now; credited = det.total;
+    // 出力が遅れる端末（Bluetooth など）では音が遅れてマイクに届くので、その分も待つ（0.5秒まで）
+    var lat = Math.min(0.5, (c.outputLatency || 0) + (c.baseLatency || 0));
+    muteUntil = goAt + ((window.Sfx && window.Sfx.GO_SEC) || 0.40) + 0.10 + lat;
+    countShown = 0; countHideAt = goAt + 0.9;
+    showCount('スタート！', '#2f9e5f', true);
+    setPills(); setHint(''); syncBtn();
+    return true;
+  }
 
   var nextNoteAt = 0, noteN = 0;
   var NOTE_CH = ['♪︎', '♫︎', '♪︎', '♬︎'];
@@ -944,7 +1007,10 @@
     var trem = d.state === 'tremolo';
     var hearing = phase !== 'done' && (d.state === 'rising' || d.state === 'watering' || trem);
 
-    if (phase === 'ready' && hearing) { phase = 'play'; elapsed = 0; adt = 0; credited = d.total; setPills(); setHint(''); }
+    if (phase === 'ready' && micFailed) wantCount = false;
+    if (phase === 'ready' && wantCount && audio.sp && audio.ctx && audio.ctx.state === 'running') beginCount();
+    if (phase === 'count' && stepCount()) { adt = 0; hearing = false; }
+    if (countHideAt && audio.ctx && audio.ctx.currentTime >= countHideAt) hideCount();
     // 制限時間を越えた分の音は伸びにしない（裏にいた間にまとめて進んだ時のため）
     var frac = 1;
     if (phase === 'play') {
@@ -970,7 +1036,7 @@
       timerEl.style.setProperty('--left', (left / limit).toFixed(3));
       timerEl.classList.toggle('hurry', left <= 5);
       if (left <= 0) { finish(); return; }
-    } else if (phase === 'ready') {
+    } else if (phase === 'ready' || phase === 'count') {
       credited = d.total;
     }
 
@@ -1000,7 +1066,8 @@
     speedEl.classList.toggle('warp', cm >= 10);
 
     if (hearing !== hearShown) { hearShown = hearing; tip.classList.toggle('hear', hearing); seed.classList.toggle('hear', hearing); }
-    if (phase === 'ready') setHint('ひいたら スタート！');
+    if (phase === 'ready') setHint('タップで スタート！');
+    else if (phase === 'count') setHint('');
     else if (trem && phase === 'play') setHint('のばすと もっと のびるよ');
     else if (phase === 'play') setHint('');
 
@@ -1033,6 +1100,7 @@
   function finish() {
     phase = 'done';
     det.pause();
+    hideCount();
     setHint('');
     tip.classList.remove('hear'); seed.classList.remove('hear'); hearShown = false;
     combo.classList.remove('on'); lastCombo = ''; speedEl.style.opacity = '0';
@@ -1066,6 +1134,7 @@
   }
   function resetGame() {
     if (window.Sfx) window.Sfx.stop();
+    hideCount(); muteUntil = 0;
     phase = 'ready'; L = 0; det.reset(); credited = 0; elapsed = 0; lastMeterIdx = 0; passedFlags = []; lastReached = '';
     objEls.forEach(function (el) { el.classList.remove('passed'); });
     notesEl.innerHTML = ''; confetti.innerHTML = '';
@@ -1105,7 +1174,11 @@
   function syncBtn() {
     if (phase === 'done') return;
     var ctx = audio.ctx;
-    if (ctx && ctx.state === 'running') { everRan = true; mainBtn.textContent = 'きいているよ'; mainBtn.disabled = true; }
+    if (ctx && ctx.state === 'running') {
+      everRan = true;
+      if (phase === 'ready') { mainBtn.textContent = 'スタート'; mainBtn.disabled = false; }
+      else { mainBtn.textContent = 'きいているよ'; mainBtn.disabled = true; }
+    }
     else { mainBtn.textContent = (ctx && everRan) ? 'つづける' : 'はじめる'; mainBtn.disabled = starting; }
   }
   function teardown() {
@@ -1130,9 +1203,14 @@
       var ctx = ctx0;
       if (typeof ctx.createScriptProcessor !== 'function') throw new Error('ScriptProcessor が使えません');
       var src = ctx.createMediaStreamSource(stream), sp = ctx.createScriptProcessor(2048, 1, 1), mute = ctx.createGain();
+      var silent = new Float32Array(2048);   // スタートの音を拾わないように、判定器へ渡す無音
       mute.gain.value = 0;
       det = new window.SustainDetector(ctx.sampleRate, cfg); wg.detector = det; credited = 0;
-      sp.onaudioprocess = function (e) { if (phase === 'done') return; det.feed(e.inputBuffer.getChannelData(0)); };
+      sp.onaudioprocess = function (e) {
+        if (phase === 'done') return;
+        var buf = e.inputBuffer.getChannelData(0);
+        det.feed(ctx.currentTime < muteUntil ? silent : buf);
+      };
       ctx.onstatechange = function () { if (ctx.state !== 'running' && ctx.state !== 'closed') det.pause(); syncBtn(); };
       stream.getAudioTracks().forEach(function (tr) {
         tr.addEventListener('ended', function () { det.pause(); try { ctx.close(); } catch (e) {} teardown(); syncBtn(); showMicError('マイクが切れました'); });
@@ -1149,12 +1227,19 @@
     });
   }
   mainBtn.addEventListener('click', function () {
-    if (phase === 'done') { resetGame(); if (!audio.ctx || audio.ctx.state !== 'running') startAudio(); return; }
-    micFailed = false; startAudio();
+    micFailed = false;
+    if (phase === 'done') { resetGame(); wantCount = true; if (!audio.ctx || audio.ctx.state !== 'running') startAudio(); return; }
+    if (phase === 'ready') wantCount = true;
+    startAudio();
   });
-  document.addEventListener('pointerdown', function (e) {
-    if (phase === 'done' || micFailed) return;
+  // pointerup にする（iPhone のタッチは、指を離す時でないと音の解除が効かない）
+  var downOnUi = false;   // ボタンの上で押して別の場所で離した時は、タップとして扱わない
+  document.addEventListener('pointerdown', function (e) { downOnUi = !!(e.target.closest && e.target.closest('button, a, input')); });
+  document.addEventListener('pointerup', function (e) {
+    var fromUi = downOnUi; downOnUi = false;
+    if (fromUi || phase === 'done' || micFailed) return;
     if (e.target.closest && e.target.closest('button, a, input')) return;
+    if (phase === 'ready') wantCount = true;
     if (!audio.ctx || audio.ctx.state !== 'running') startAudio();
   });
 
@@ -1163,10 +1248,13 @@
     detector: det, audio: audio,
     getState: function () {
       return { phase: phase, L: +L.toFixed(3), height: +hOf(L).toFixed(1), elapsed: +elapsed.toFixed(2), limit: limit, best: best, total: det.total, state: det.state,
-        stroke: det.stroke, button: mainBtn.textContent + (mainBtn.disabled ? '(押せない)' : '(押せる)'), reached: lastReached };
+        stroke: det.stroke, button: mainBtn.textContent + (mainBtn.disabled ? '(押せない)' : '(押せる)'), reached: lastReached,
+        count: countShown, goIn: phase === 'count' && audio.ctx ? +(goAt - audio.ctx.currentTime).toFixed(3) : 0, muted: !!(audio.ctx && audio.ctx.currentTime < muteUntil) };
     }
   };
   window.__wg = wg;
+
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) return; wantCount = false; if (phase === 'count') cancelCount(); });
 
   /* ---------- 起こし ---------- */
   window.addEventListener('resize', function () { layout(); });

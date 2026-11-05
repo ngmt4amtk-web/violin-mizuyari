@@ -48,6 +48,27 @@
   function sparkle(c, dest, t, n, vol) {
     for (var i = 0; i < n; i++) tone(c, dest, 2093 * Math.pow(2, ((i * 5) % 12) / 12), t + i * 0.055, 0.12, vol, 'sine');
   }
+  // スタートのカウント用の音: 矩形波1つ。すぐ立ち上げ、t+dur-0.03 まで保ち、t+dur で消す
+  function beep(c, dest, f, t, dur, vol) {
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = 'square'; o.frequency.value = f;
+    o.connect(g); g.connect(dest);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+    g.gain.setValueAtTime(vol, t + dur - 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // 3・2・1・スタート！の音（ポッ・ポッ・ポッ・ポーン）。t0 は AudioContext の時刻
+  var GO_SEC = 0.40;
+  function countdown(ctx, t0) {
+    var c = ctxOf(ctx); if (!c) return;
+    var d = out(c);
+    beep(c, d, 587.33, t0, 0.25, 0.2);
+    beep(c, d, 587.33, t0 + 1, 0.25, 0.2);
+    beep(c, d, 587.33, t0 + 2, 0.25, 0.2);
+    beep(c, d, 1174.66, t0 + 3, GO_SEC, 0.26);
+  }
   var N = { C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880, B5: 987.77, C6: 1046.5, E6: 1318.5, G6: 1568, C7: 2093, G4: 392, C4: 261.63, E4: 329.63 };
   // kind: 'seed'（タネ1つ咲いた・小さく短く）| 'bloom'（咲いた・おしまい）| 'record'（さいこう きろく・大きく長く）
   function play(kind, ctx) {
@@ -75,5 +96,5 @@
     tone(c, d, N.C4, t3, 1.0, 0.2, 'sine');
     sparkle(c, d, t3 + 0.08, 6, 0.07);
   }
-  root.Sfx = { prepare: prepare, play: play, stop: stop };
+  root.Sfx = { prepare: prepare, play: play, stop: stop, countdown: countdown, GO_SEC: GO_SEC };
 })(typeof window !== 'undefined' ? window : globalThis);
